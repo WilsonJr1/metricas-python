@@ -57,6 +57,46 @@ def separar_dados_sem_teste(df):
         return com_teste, sem_teste
     return df, pd.DataFrame()
 
+def contar_bugs_por_time(df_rejeitadas):
+    """Conta todos os bugs por time considerando Motivo, Motivo2 e Motivo3"""
+    if df_rejeitadas.empty:
+        return pd.Series(dtype=int)
+    
+    bugs_por_time = {}
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    
+    for _, row in df_rejeitadas.iterrows():
+        time = row.get('Time', 'Desconhecido')
+        if time not in bugs_por_time:
+            bugs_por_time[time] = 0
+        
+        # Conta cada motivo não nulo como um bug separado, excluindo não-bugs
+        for col in motivos_cols:
+            if col in row and pd.notna(row[col]) and str(row[col]).strip() != '':
+                motivo = str(row[col]).strip().lower()
+                if motivo not in ['aprovada', 'sem recusa']:
+                    bugs_por_time[time] += 1
+    
+    return pd.Series(bugs_por_time).sort_values(ascending=False)
+
+def contar_total_bugs(df_rejeitadas):
+    """Conta o total de bugs considerando Motivo, Motivo2 e Motivo3"""
+    if df_rejeitadas.empty:
+        return 0
+    
+    total_bugs = 0
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    
+    for _, row in df_rejeitadas.iterrows():
+        # Conta cada motivo não nulo como um bug separado, excluindo não-bugs
+        for col in motivos_cols:
+            if col in row and pd.notna(row[col]) and str(row[col]).strip() != '':
+                motivo = str(row[col]).strip().lower()
+                if motivo not in ['aprovada', 'sem recusa']:
+                    total_bugs += 1
+    
+    return total_bugs
+
 def grafico_tasks_por_sprint(df_filtrado):
     if 'Sprint' in df_filtrado.columns:
         sprint_counts = df_filtrado['Sprint'].value_counts()
@@ -184,7 +224,14 @@ def grafico_motivos_rejeicao(df_filtrado):
                 todos_motivos.extend(motivos)
             
             if todos_motivos:
-                motivos_counts = pd.Series(todos_motivos).value_counts().head(10)
+                # Filtrar motivos que não são bugs reais
+                motivos_filtrados = [motivo for motivo in todos_motivos 
+                                   if motivo.lower() not in ['aprovada', 'sem recusa']]
+                
+                if motivos_filtrados:
+                    motivos_counts = pd.Series(motivos_filtrados).value_counts().head(10)
+                else:
+                    return None
                 fig = px.bar(
                     x=motivos_counts.values,
                     y=motivos_counts.index,
@@ -267,7 +314,7 @@ def grafico_erros_por_time(df_filtrado):
     if 'Time' in df_filtrado.columns and 'Status' in df_filtrado.columns:
         df_rejeitadas = df_filtrado[df_filtrado['Status'] == 'REJEITADA']
         if not df_rejeitadas.empty:
-            erros_por_time = df_rejeitadas['Time'].value_counts()
+            erros_por_time = contar_bugs_por_time(df_rejeitadas)
             
             fig = px.bar(
                 x=erros_por_time.index,
@@ -305,7 +352,14 @@ def grafico_distribuicao_bugs_tipo(df_filtrado):
                 todos_motivos.extend(motivos)
             
             if todos_motivos:
-                motivos_counts = pd.Series(todos_motivos).value_counts().head(8)
+                # Filtrar motivos que não são bugs reais
+                motivos_filtrados = [motivo for motivo in todos_motivos 
+                                   if motivo.lower() not in ['aprovada', 'sem recusa']]
+                
+                if motivos_filtrados:
+                    motivos_counts = pd.Series(motivos_filtrados).value_counts().head(8)
+                else:
+                    return None
                 
                 fig = px.pie(
                     values=motivos_counts.values,
@@ -454,154 +508,187 @@ def grafico_comparativo_testadores(df_filtrado):
 
 
 
-def metricas_resumo(df_filtrado, df_original):
-    # Primeira linha de KPIs
-    col1, col2, col3, col4 = st.columns(4)
+def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
+    # Cabeçalho executivo
+    st.markdown("#### 📈 **Resumo Executivo - Impacto do Time de Qualidade**")
+    st.markdown("*Demonstrando o valor agregado e ROI do investimento em Quality Assurance*")
     
+    # Cálculos principais
     total_planilha = len(df_original)
     total_testes_efetuados = len(df_filtrado[df_filtrado['Responsavel pelo teste'].notna()])
-    total_sem_teste = len(df_filtrado[df_filtrado['Responsavel pelo teste'].isna()])
+    total_sem_teste = len(df_sem_teste) if df_sem_teste is not None else len(df_original[df_original['Motivo'].str.upper().str.contains('SEM TESTE', na=False)])
+    
+    # Métricas de bugs
+    df_rejeitadas = df_filtrado[df_filtrado['Status'] == 'REJEITADA'] if 'Status' in df_filtrado.columns else pd.DataFrame()
+    total_bugs_encontrados = contar_total_bugs(df_rejeitadas) if not df_rejeitadas.empty else 0
+    aprovadas = len(df_filtrado[df_filtrado['Status'] == 'APROVADA']) if 'Status' in df_filtrado.columns else 0
+    
+    # === SEÇÃO 1: MÉTRICAS DE VOLUME E COBERTURA ===
+    st.markdown("##### 🎯 **Volume de Trabalho e Cobertura**")
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("📊 Total na Planilha", total_planilha, help="Total de registros na planilha (inclui todos os tipos)")
+        cobertura_teste = (total_testes_efetuados / total_planilha * 100) if total_planilha > 0 else 0
+        st.metric(
+            "📊 Cobertura de Testes", 
+            f"{cobertura_teste:.1f}%",
+            delta=f"{total_testes_efetuados} de {total_planilha} tarefas",
+            help="Percentual de tarefas que receberam validação de qualidade"
+        )
     
     with col2:
-        st.metric("🧪 Testes Efetuados", total_testes_efetuados, help="Total de testes realmente executados pelo time de Q.A")
-    
-    with col3:
-        st.metric("❌ Sem Teste", total_sem_teste, help="Registros marcados como 'SEM TESTE'")
-    
-    with col4:
         if 'Nome da Task' in df_filtrado.columns:
             tarefas_unicas = df_filtrado['Nome da Task'].nunique()
-            st.metric("📋 Tarefas Únicas Testadas", tarefas_unicas, help="Número de tarefas diferentes que foram testadas")
         else:
-            st.metric("📋 Tarefas Únicas Testadas", 0, help="Número de tarefas diferentes que foram testadas")
+            tarefas_unicas = 0
+        st.metric(
+            "📋 Tarefas Validadas", 
+            f"{tarefas_unicas:,}",
+            delta="tarefas únicas testadas",
+            help="Número de tarefas diferentes que passaram por validação de qualidade"
+        )
     
-    # Segunda linha de KPIs
+    with col3:
+        if 'Time' in df_filtrado.columns:
+            times_atendidos = df_filtrado['Time'].nunique()
+        else:
+            times_atendidos = 0
+        st.metric(
+            "🏢 Times Atendidos", 
+            f"{times_atendidos}",
+            delta="times de desenvolvimento",
+            help="Número de times de desenvolvimento com cobertura de Q.A"
+        )
+    
+    with col4:
+        if 'Responsavel pelo teste' in df_filtrado.columns:
+            testadores_ativos = df_filtrado['Responsavel pelo teste'].nunique()
+        else:
+            testadores_ativos = 0
+        st.metric(
+            "👥 Equipe Q.A Ativa", 
+            f"{testadores_ativos}",
+            delta="profissionais envolvidos",
+            help="Número de profissionais de Q.A ativamente testando"
+        )
+    
+    # === SEÇÃO 2: IMPACTO NA QUALIDADE ===
+    st.markdown("##### 🛡️ **Impacto na Qualidade e Prevenção de Defeitos**")
     col5, col6, col7, col8 = st.columns(4)
     
     with col5:
-        if 'Status' in df_filtrado.columns:
-            aprovadas = len(df_filtrado[df_filtrado['Status'] == 'APROVADA'])
-            st.metric("✅ Testes Aprovados", aprovadas, help="Testes que passaram na validação de qualidade")
+        st.metric(
+            "🚫 Bugs Interceptados", 
+            f"{total_bugs_encontrados:,}",
+            delta="problemas evitados em produção",
+            help="Total de defeitos identificados e corrigidos antes da entrega"
+        )
     
     with col6:
-        if 'Status' in df_filtrado.columns:
-            rejeitadas = len(df_filtrado[df_filtrado['Status'] == 'REJEITADA'])
-            st.metric("🚫 Bugs Identificados", rejeitadas, help="Total de problemas detectados antes da produção")
+        taxa_deteccao = (total_bugs_encontrados / total_testes_efetuados * 100) if total_testes_efetuados > 0 else 0
+        st.metric(
+            "🔍 Taxa de Detecção", 
+            f"{taxa_deteccao:.1f}%",
+            delta="eficiência na identificação",
+            help="Percentual de bugs detectados em relação aos testes realizados"
+        )
     
     with col7:
-        if 'Status' in df_filtrado.columns and total_testes_efetuados > 0:
-            rejeitadas = len(df_filtrado[df_filtrado['Status'] == 'REJEITADA'])
-            taxa_deteccao = (rejeitadas / total_testes_efetuados * 100)
-            st.metric("🔍 Taxa de Detecção de Bugs", f"{taxa_deteccao:.1f}%", help="Percentual de testes com problemas identificados pelo Q.A")
+        taxa_aprovacao = (aprovadas / total_testes_efetuados * 100) if total_testes_efetuados > 0 else 0
+        st.metric(
+            "✅ Taxa de Aprovação", 
+            f"{taxa_aprovacao:.1f}%",
+            delta=f"{aprovadas} testes aprovados",
+            help="Percentual de testes que passaram na primeira validação"
+        )
     
     with col8:
-        if 'Responsavel pelo teste' in df_filtrado.columns:
-            total_testadores = df_filtrado['Responsavel pelo teste'].nunique()
-            st.metric("👥 Testadores Ativos", total_testadores, help="Número de profissionais de Q.A envolvidos")
+        # Estimativa de valor economizado (bugs em produção custam 10x mais para corrigir)
+        valor_economizado = total_bugs_encontrados * 10
+        st.metric(
+            "💰 Valor Economizado", 
+            f"{valor_economizado:,}x",
+            delta="custo evitado (estimativa)",
+            help="Estimativa de economia baseada no custo 10x maior de correção em produção"
+        )
     
-    # Terceira linha de KPIs - Indicadores Avançados
-    st.markdown("### 🎯 **KPIs de Performance e Qualidade**")
-    col9, col10, col11, col12 = st.columns(4)
+    # === SEÇÃO 3: ANÁLISE DE RISCOS E PONTOS CRÍTICOS ===
+    st.markdown("##### ⚠️ **Análise de Riscos e Pontos de Atenção**")
+    col9, col10, col11 = st.columns(3)
     
     with col9:
-        if 'Time' in df_filtrado.columns:
-            times_ativos = df_filtrado['Time'].nunique()
-            st.metric("🏢 Times Cobertos", times_ativos, help="Número de times de desenvolvimento com cobertura de Q.A")
+        if not df_rejeitadas.empty and 'Time' in df_rejeitadas.columns:
+            bugs_por_time = contar_bugs_por_time(df_rejeitadas)
+            if not bugs_por_time.empty:
+                time_critico = bugs_por_time.index[0]
+                bugs_time_critico = bugs_por_time.iloc[0]
+                st.metric(
+                    "🚨 Time com Maior Risco", 
+                    f"{time_critico}",
+                    delta=f"{bugs_time_critico} bugs identificados",
+                    delta_color="inverse",
+                    help="Time que apresentou maior número de defeitos - requer atenção especial"
+                )
     
     with col10:
-        if 'Status' in df_filtrado.columns and total_testes_efetuados > 0:
-            aprovadas = len(df_filtrado[df_filtrado['Status'] == 'APROVADA'])
-            taxa_aprovacao = (aprovadas / total_testes_efetuados * 100)
-            delta_aprovacao = taxa_aprovacao - 70  # Meta de 70% de aprovação
-            st.metric(
-                "📈 Taxa de Aprovação", 
-                f"{taxa_aprovacao:.1f}%", 
-                delta=f"{delta_aprovacao:+.1f}%",
-                help="Percentual de testes aprovados (Meta: 70%)"
-            )
-    
-    with col11:
-        if 'Responsavel pelo teste' in df_filtrado.columns and total_testes_efetuados > 0:
-            media_testes_por_testador = total_testes_efetuados / df_filtrado['Responsavel pelo teste'].nunique()
-            st.metric(
-                "⚡ Produtividade Média", 
-                f"{media_testes_por_testador:.1f}",
-                help="Média de testes por testador"
-            )
-    
-    with col12:
-        if 'Status' in df_filtrado.columns:
-            df_rejeitadas = df_filtrado[df_filtrado['Status'] == 'REJEITADA']
-            if not df_rejeitadas.empty and 'Time' in df_rejeitadas.columns:
-                time_com_mais_bugs = df_rejeitadas['Time'].value_counts().index[0]
-                bugs_time_critico = df_rejeitadas['Time'].value_counts().iloc[0]
-                st.metric(
-                    "🚨 Time Crítico", 
-                    f"{bugs_time_critico} bugs",
-                    delta=f"{time_com_mais_bugs}",
-                    help="Time com maior número de bugs identificados"
-                )
-    
-    # Quarta linha de KPIs - Eficiência e Impacto
-    col13, col14, col15, col16 = st.columns(4)
-    
-    with col13:
-        if total_planilha > 0:
-            cobertura_qa = (total_testes_efetuados / total_planilha * 100)
-            delta_cobertura = cobertura_qa - 80  # Meta de 80% de cobertura
-            st.metric(
-                "🎯 Cobertura Q.A", 
-                f"{cobertura_qa:.1f}%",
-                delta=f"{delta_cobertura:+.1f}%",
-                help="Percentual de tasks com cobertura de Q.A (Meta: 80%)"
-            )
-    
-    with col14:
-        if 'Status' in df_filtrado.columns:
-            rejeitadas = len(df_filtrado[df_filtrado['Status'] == 'REJEITADA'])
-            valor_agregado = rejeitadas * 2  # Estimativa: cada bug evitado economiza 2h de retrabalho
-            st.metric(
-                "💰 Valor Agregado", 
-                f"{valor_agregado}h",
-                help="Estimativa de horas de retrabalho evitadas (2h por bug)"
-            )
-    
-    with col15:
-        if 'Data' in df_filtrado.columns:
-            df_com_data = df_filtrado.dropna(subset=['Data'])
-            if not df_com_data.empty:
-                dias_periodo = (df_com_data['Data'].max() - df_com_data['Data'].min()).days + 1
-                testes_por_dia = total_testes_efetuados / max(dias_periodo, 1)
-                st.metric(
-                    "📅 Testes/Dia", 
-                    f"{testes_por_dia:.1f}",
-                    help="Média de testes executados por dia no período"
-                )
-    
-    with col16:
-        if 'Status' in df_filtrado.columns:
-            df_rejeitadas = df_filtrado[df_filtrado['Status'] == 'REJEITADA']
+        if not df_rejeitadas.empty:
             motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
             motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
             
-            if motivos_existentes and not df_rejeitadas.empty:
+            if motivos_existentes:
                 todos_motivos = []
                 for col in motivos_existentes:
                     motivos = df_rejeitadas[col].dropna().tolist()
                     todos_motivos.extend(motivos)
                 
                 if todos_motivos:
-                    motivo_mais_comum = pd.Series(todos_motivos).value_counts().index[0]
-                    ocorrencias = pd.Series(todos_motivos).value_counts().iloc[0]
-                    st.metric(
-                        "🔍 Bug Mais Comum", 
-                        f"{ocorrencias}x",
-                        delta=f"{motivo_mais_comum[:20]}...",
-                        help="Tipo de bug mais frequente identificado"
-                    )
+                    motivos_filtrados = [motivo for motivo in todos_motivos 
+                                       if motivo.lower() not in ['aprovada', 'sem recusa']]
+                    
+                    if motivos_filtrados:
+                        motivo_mais_comum = pd.Series(motivos_filtrados).value_counts().index[0]
+                        ocorrencias_motivo = pd.Series(motivos_filtrados).value_counts().iloc[0]
+                        st.metric(
+                            "🔍 Principal Tipo de Defeito", 
+                            f"{motivo_mais_comum[:15]}...",
+                            delta=f"{ocorrencias_motivo} ocorrências",
+                            delta_color="inverse",
+                            help="Tipo de defeito mais frequente - oportunidade de melhoria no processo"
+                        )
+    
+    with col11:
+        taxa_sem_teste = (total_sem_teste / total_planilha * 100) if total_planilha > 0 else 0
+        st.metric(
+            "⚠️ Tarefas Sem Cobertura", 
+            f"{taxa_sem_teste:.1f}%",
+            delta=f"{total_sem_teste} tarefas",
+            delta_color="inverse" if taxa_sem_teste > 20 else "normal",
+            help="Percentual de tarefas que não receberam validação de qualidade"
+        )
+    
+    # === RESUMO EXECUTIVO ===
+    st.markdown("##### 📋 **Resumo para Diretoria**")
+    
+    # Criar métricas de resumo em formato mais executivo
+    col_resumo1, col_resumo2 = st.columns(2)
+    
+    with col_resumo1:
+        st.info(f"""
+        **🎯 EFETIVIDADE DO TIME Q.A:**
+        • **{total_bugs_encontrados:,} defeitos** interceptados antes da produção
+        • **{taxa_deteccao:.1f}%** de eficiência na detecção de problemas
+        • **{cobertura_teste:.1f}%** de cobertura nas tarefas de desenvolvimento
+        • **{times_atendidos} times** de desenvolvimento atendidos
+        """)
+    
+    with col_resumo2:
+        st.success(f"""
+        **💼 VALOR ENTREGUE:**
+        • **{valor_economizado:,}x** em custos evitados (estimativa)
+        • **{taxa_aprovacao:.1f}%** de taxa de aprovação na primeira validação
+        • **{testadores_ativos} profissionais** dedicados à qualidade
+        • **{tarefas_unicas:,} tarefas** validadas com sucesso
+        """)
 
 
 def main():
@@ -612,7 +699,7 @@ def main():
     )
     
     st.title("🔍 Dashboard Q.A DelTech - Métricas de Qualidade")
-    st.markdown("### Análise do Impacto e Performance do Time de Quality Assurance")
+    st.markdown("## 🎯 Dashboard Executivo - Apresentação para Diretoria")
     st.markdown("*Demonstrando o valor agregado pelo time de Q.A na entrega de software de qualidade*")
     st.markdown("---")
     
@@ -689,199 +776,250 @@ def main():
         df_original = df_filtrado if filtros_ativos else df
         df_com_teste, df_sem_teste = separar_dados_sem_teste(df_original)
         
-        st.subheader("📈 Métricas Gerais")
-        metricas_resumo(df_original, df)
-        
         if filtros_ativos and not df_com_teste.empty:
             st.info(f"Mostrando {len(df_com_teste)} testes efetuados de {len(df_original)} registros totais.")
         
         st.markdown("---")
         
-        st.subheader("📊 Visão Geral dos Testes de Qualidade")
-        st.markdown("*Análise abrangente do trabalho realizado pelo time de Q.A*")
+        # Criar abas para organizar o dashboard
+        tab1, tab2, tab3, tab4 = st.tabs(["📈 KPIs Executivos", "📊 Análise Operacional", "👥 Performance da Equipe", "📋 Dados Detalhados"])
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            fig1 = grafico_tasks_por_sprint(df_com_teste)
-            if fig1:
-                st.plotly_chart(fig1, use_container_width=True)
+        with tab1:
+            st.markdown("### 🎯 **Métricas Estratégicas para Diretoria**")
+            st.markdown("*Demonstrando o valor e ROI do investimento em Quality Assurance*")
             
-            fig3 = grafico_tasks_por_time(df_com_teste)
-            if fig3:
-                st.plotly_chart(fig3, use_container_width=True)
-        
-        with col2:
-            fig2 = grafico_status_distribuicao(df_com_teste)
-            if fig2:
-                st.plotly_chart(fig2, use_container_width=True)
+            # Métricas executivas principais
+            metricas_resumo(df_com_teste, df, df_sem_teste)
             
-            fig5 = grafico_timeline_tasks(df_com_teste)
-            if fig5:
-                st.plotly_chart(fig5, use_container_width=True)
-        
-        st.markdown("---")
-        st.subheader("🔍 Análise de Qualidade e Bugs")
-        
-        col3, col4 = st.columns(2)
-        
-        with col3:
-            fig_motivos = grafico_motivos_rejeicao(df_filtrado)
-            if fig_motivos:
-                st.plotly_chart(fig_motivos, use_container_width=True)
+            st.markdown("---")
             
-            fig_erros_time = grafico_erros_por_time(df_filtrado)
-            if fig_erros_time:
-                st.plotly_chart(fig_erros_time, use_container_width=True)
-        
-        with col4:
-            fig_distribuicao_bugs = grafico_distribuicao_bugs_tipo(df_filtrado)
-            if fig_distribuicao_bugs:
-                st.plotly_chart(fig_distribuicao_bugs, use_container_width=True)
+            # Gráficos executivos específicos
+            st.markdown("#### 📊 **Indicadores Visuais Estratégicos**")
             
-            fig_taxa_rejeicao_time = grafico_taxa_rejeicao_por_time(df_filtrado)
-            if fig_taxa_rejeicao_time:
-                st.plotly_chart(fig_taxa_rejeicao_time, use_container_width=True)
-        
-        st.markdown("---")
-        st.subheader("📊 Análise de Performance e Tendências")
-        
-        col5, col6 = st.columns(2)
-        
-        with col5:
-            fig_taxa_dev = grafico_rejeicoes_por_dev(df_filtrado)
-            if fig_taxa_dev:
-                st.plotly_chart(fig_taxa_dev, use_container_width=True)
+            col_exec1, col_exec2 = st.columns(2)
             
-            fig_evolucao = grafico_evolucao_qualidade(df_filtrado)
-            if fig_evolucao:
-                st.plotly_chart(fig_evolucao, use_container_width=True)
-        
-        st.markdown("---")
-        st.subheader("📈 Performance dos Testadores Q.A")
-        st.markdown("*Métricas comparativas detalhadas entre testadores*")
-        
-        if 'Responsavel pelo teste' in df_com_teste.columns and not df_com_teste.empty:
-            testador_stats = df_com_teste.groupby('Responsavel pelo teste').agg({
-                'Status': ['count', lambda x: (x == 'REJEITADA').sum(), lambda x: (x == 'APROVADA').sum()]
-            }).round(1)
+            with col_exec1:
+                # Gráfico de evolução da qualidade
+                fig_evolucao = grafico_evolucao_qualidade(df_com_teste)
+                if fig_evolucao:
+                    st.plotly_chart(fig_evolucao, use_container_width=True, key="evolucao_qualidade")
+                
+                # Distribuição de status
+                fig_status = grafico_status_distribuicao(df_com_teste)
+                if fig_status:
+                    st.plotly_chart(fig_status, use_container_width=True, key="distribuicao_status")
             
-            testador_stats.columns = ['Total_Testes', 'Bugs_Encontrados', 'Testes_Aprovados']
-            testador_stats['Taxa_Deteccao'] = (testador_stats['Bugs_Encontrados'] / testador_stats['Total_Testes'] * 100).round(1)
-            testador_stats['Taxa_Aprovacao'] = (testador_stats['Testes_Aprovados'] / testador_stats['Total_Testes'] * 100).round(1)
-            testador_stats['Produtividade'] = testador_stats['Total_Testes']
-            testador_stats = testador_stats.reset_index()
+            with col_exec2:
+                # Erros por time (crítico para diretoria)
+                fig_erros_time = grafico_erros_por_time(df_com_teste)
+                if fig_erros_time:
+                    st.plotly_chart(fig_erros_time, use_container_width=True, key="erros_por_time_exec")
+                
+                # Taxa de rejeição por time
+                fig_taxa_rejeicao = grafico_taxa_rejeicao_por_time(df_com_teste)
+                if fig_taxa_rejeicao:
+                    st.plotly_chart(fig_taxa_rejeicao, use_container_width=True, key="taxa_rejeicao_exec")
+        
+        with tab2:
+            st.markdown("### 📊 **Análise Operacional Detalhada**")
+            st.markdown("*Visão técnica e operacional para gestores de Q.A e desenvolvimento*")
             
+            # Visão geral operacional
+            st.markdown("#### 📊 **Visão Geral dos Testes**")
             col1, col2 = st.columns(2)
             
             with col1:
-                st.markdown("**📊 Métricas por Testador**")
-                for _, row in testador_stats.iterrows():
-                    with st.expander(f"👤 {row['Responsavel pelo teste']}"):
-                        col_a, col_b, col_c = st.columns(3)
-                        with col_a:
-                            st.metric("Total de Testes", int(row['Total_Testes']))
-                        with col_b:
-                            st.metric("Bugs Encontrados", int(row['Bugs_Encontrados']))
-                        with col_c:
-                            st.metric("Testes Aprovados", int(row['Testes_Aprovados']))
-                        
-                        col_d, col_e = st.columns(2)
-                        with col_d:
-                            st.metric("Taxa de Detecção", f"{row['Taxa_Deteccao']:.1f}%")
-                        with col_e:
-                            st.metric("Taxa de Aprovação", f"{row['Taxa_Aprovacao']:.1f}%")
+                fig1 = grafico_tasks_por_sprint(df_com_teste)
+                if fig1:
+                    st.plotly_chart(fig1, use_container_width=True, key="tasks_por_sprint")
+                
+                fig3 = grafico_tasks_por_time(df_com_teste)
+                if fig3:
+                    st.plotly_chart(fig3, use_container_width=True, key="tasks_por_time")
             
             with col2:
-                st.markdown("**📈 Ranking de Performance**")
+                fig2 = grafico_status_distribuicao(df_com_teste)
+                if fig2:
+                    st.plotly_chart(fig2, use_container_width=True, key="tasks_por_responsavel")
                 
-                ranking_produtividade = testador_stats.sort_values('Total_Testes', ascending=False)
-                st.markdown("🏆 **Produtividade (Total de Testes)**")
-                for i, (_, row) in enumerate(ranking_produtividade.iterrows(), 1):
-                    emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "📍"
-                    st.write(f"{emoji} {i}º - {row['Responsavel pelo teste']}: {int(row['Total_Testes'])} testes")
+                fig5 = grafico_timeline_tasks(df_com_teste)
+                if fig5:
+                    st.plotly_chart(fig5, use_container_width=True, key="tasks_por_status")
+            
+            st.markdown("---")
+            st.markdown("#### 🔍 **Análise de Qualidade e Bugs**")
+            
+            col3, col4 = st.columns(2)
+            
+            with col3:
+                fig_motivos = grafico_motivos_rejeicao(df_com_teste)
+                if fig_motivos:
+                    st.plotly_chart(fig_motivos, use_container_width=True, key="motivos_rejeicao")
                 
-                st.markdown("")
-                ranking_deteccao = testador_stats.sort_values('Taxa_Deteccao', ascending=False)
-                st.markdown("🔍 **Taxa de Detecção de Bugs**")
-                for i, (_, row) in enumerate(ranking_deteccao.iterrows(), 1):
-                    emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "📍"
-                    st.write(f"{emoji} {i}º - {row['Responsavel pelo teste']}: {row['Taxa_Deteccao']:.1f}%")
+                fig_erros_time = grafico_erros_por_time(df_com_teste)
+                if fig_erros_time:
+                    st.plotly_chart(fig_erros_time, use_container_width=True, key="erros_por_time_op")
+            
+            with col4:
+                fig_distribuicao_bugs = grafico_distribuicao_bugs_tipo(df_com_teste)
+                if fig_distribuicao_bugs:
+                    st.plotly_chart(fig_distribuicao_bugs, use_container_width=True, key="distribuicao_bugs")
                 
-                st.markdown("")
-                ranking_aprovacao = testador_stats.sort_values('Taxa_Aprovacao', ascending=False)
-                st.markdown("✅ **Taxa de Aprovação**")
-                for i, (_, row) in enumerate(ranking_aprovacao.iterrows(), 1):
-                    emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "📍"
-                    st.write(f"{emoji} {i}º - {row['Responsavel pelo teste']}: {row['Taxa_Aprovacao']:.1f}%")
+                fig_taxa_rejeicao_time = grafico_taxa_rejeicao_por_time(df_com_teste)
+                if fig_taxa_rejeicao_time:
+                    st.plotly_chart(fig_taxa_rejeicao_time, use_container_width=True, key="taxa_rejeicao_time")
             
-            st.markdown("")
-            st.markdown("**📊 Comparativo Visual**")
+            st.markdown("---")
+            st.markdown("#### 📊 **Análise de Performance e Tendências**")
             
-            fig_comp = go.Figure()
+            col5, col6 = st.columns(2)
             
-            fig_comp.add_trace(go.Bar(
-                name='Total de Testes',
-                x=testador_stats['Responsavel pelo teste'],
-                y=testador_stats['Total_Testes'],
-                marker_color='lightblue',
-                text=testador_stats['Total_Testes'],
-                textposition='outside'
-            ))
+            with col5:
+                fig_taxa_dev = grafico_rejeicoes_por_dev(df_com_teste)
+                if fig_taxa_dev:
+                    st.plotly_chart(fig_taxa_dev, use_container_width=True, key="taxa_desenvolvimento")
+                
+                fig_evolucao = grafico_evolucao_qualidade(df_com_teste)
+                if fig_evolucao:
+                    st.plotly_chart(fig_evolucao, use_container_width=True, key="evolucao_tendencias")
             
-            fig_comp.update_layout(
-                title="📊 Comparativo de Produtividade entre Testadores",
-                xaxis_title="Testador",
-                yaxis_title="Quantidade de Testes",
-                margin=dict(t=50, b=50, l=50, r=50),
-                height=400
-            )
-            
-            st.plotly_chart(fig_comp, use_container_width=True)
-            
-            fig_taxa = go.Figure()
-            
-            fig_taxa.add_trace(go.Scatter(
-                name='Taxa de Detecção',
-                x=testador_stats['Responsavel pelo teste'],
-                y=testador_stats['Taxa_Deteccao'],
-                mode='lines+markers',
-                marker_color='red',
-                line=dict(width=3),
-                text=[f"{val:.1f}%" for val in testador_stats['Taxa_Deteccao']],
-                textposition='top center'
-            ))
-            
-            fig_taxa.add_trace(go.Scatter(
-                name='Taxa de Aprovação',
-                x=testador_stats['Responsavel pelo teste'],
-                y=testador_stats['Taxa_Aprovacao'],
-                mode='lines+markers',
-                marker_color='green',
-                line=dict(width=3),
-                text=[f"{val:.1f}%" for val in testador_stats['Taxa_Aprovacao']],
-                textposition='bottom center'
-            ))
-            
-            fig_taxa.update_layout(
-                title="📈 Comparativo de Taxas de Performance",
-                xaxis_title="Testador",
-                yaxis_title="Percentual (%)",
-                margin=dict(t=50, b=50, l=50, r=50),
-                height=400
-            )
-            
-            st.plotly_chart(fig_taxa, use_container_width=True)
+            with col6:
+                fig_heatmap = grafico_heatmap_atividade(df_com_teste)
+                if fig_heatmap:
+                    st.plotly_chart(fig_heatmap, use_container_width=True, key="heatmap_atividade")
         
+        with tab3:
+            st.markdown("### 👥 **Performance da Equipe Q.A**")
+            st.markdown("*Análise detalhada da performance individual e comparativa dos testadores*")
+            
+            if 'Responsavel pelo teste' in df_com_teste.columns and not df_com_teste.empty:
+                testador_stats = df_com_teste.groupby('Responsavel pelo teste').agg({
+                    'Status': ['count', lambda x: (x == 'REJEITADA').sum(), lambda x: (x == 'APROVADA').sum()]
+                }).round(1)
+                
+                testador_stats.columns = ['Total_Testes', 'Bugs_Encontrados', 'Testes_Aprovados']
+                testador_stats['Taxa_Deteccao'] = (testador_stats['Bugs_Encontrados'] / testador_stats['Total_Testes'] * 100).round(1)
+                testador_stats['Taxa_Aprovacao'] = (testador_stats['Testes_Aprovados'] / testador_stats['Total_Testes'] * 100).round(1)
+                testador_stats['Produtividade'] = testador_stats['Total_Testes']
+                testador_stats = testador_stats.reset_index()
+            
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**📊 Métricas por Testador**")
+                    for _, row in testador_stats.iterrows():
+                        with st.expander(f"👤 {row['Responsavel pelo teste']}"):
+                            col_a, col_b, col_c = st.columns(3)
+                            with col_a:
+                                st.metric("Total de Testes", int(row['Total_Testes']))
+                            with col_b:
+                                st.metric("Bugs Encontrados", int(row['Bugs_Encontrados']))
+                            with col_c:
+                                st.metric("Testes Aprovados", int(row['Testes_Aprovados']))
+                            
+                            col_d, col_e = st.columns(2)
+                            with col_d:
+                                st.metric("Taxa de Detecção", f"{row['Taxa_Deteccao']:.1f}%")
+                            with col_e:
+                                st.metric("Taxa de Aprovação", f"{row['Taxa_Aprovacao']:.1f}%")
+                
+                with col2:
+                    st.markdown("**📈 Ranking de Performance**")
+                    
+                    ranking_produtividade = testador_stats.sort_values('Total_Testes', ascending=False)
+                    st.markdown("🏆 **Produtividade (Total de Testes)**")
+                    for i, (_, row) in enumerate(ranking_produtividade.iterrows(), 1):
+                        emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "📍"
+                        st.write(f"{emoji} {i}º - {row['Responsavel pelo teste']}: {int(row['Total_Testes'])} testes")
+                    
+                    st.markdown("")
+                    ranking_deteccao = testador_stats.sort_values('Taxa_Deteccao', ascending=False)
+                    st.markdown("🔍 **Taxa de Detecção de Bugs**")
+                    for i, (_, row) in enumerate(ranking_deteccao.iterrows(), 1):
+                        emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "📍"
+                        st.write(f"{emoji} {i}º - {row['Responsavel pelo teste']}: {row['Taxa_Deteccao']:.1f}%")
+                    
+                    st.markdown("")
+                    ranking_aprovacao = testador_stats.sort_values('Taxa_Aprovacao', ascending=False)
+                    st.markdown("✅ **Taxa de Aprovação**")
+                    for i, (_, row) in enumerate(ranking_aprovacao.iterrows(), 1):
+                        emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "📍"
+                        st.write(f"{emoji} {i}º - {row['Responsavel pelo teste']}: {row['Taxa_Aprovacao']:.1f}%")
+                
+                st.markdown("")
+                st.markdown("**📊 Comparativo Visual**")
+                
+                fig_comp = go.Figure()
+                
+                fig_comp.add_trace(go.Bar(
+                    name='Total de Testes',
+                    x=testador_stats['Responsavel pelo teste'],
+                    y=testador_stats['Total_Testes'],
+                    marker_color='lightblue',
+                    text=testador_stats['Total_Testes'],
+                    textposition='outside'
+                ))
+                
+                fig_comp.update_layout(
+                    title="📊 Comparativo de Produtividade entre Testadores",
+                    xaxis_title="Testador",
+                    yaxis_title="Quantidade de Testes",
+                    margin=dict(t=50, b=50, l=50, r=50),
+                    height=400
+                )
+                
+                st.plotly_chart(fig_comp, use_container_width=True, key="comparativo_produtividade")
+                
+                fig_taxa = go.Figure()
+                
+                fig_taxa.add_trace(go.Scatter(
+                    name='Taxa de Detecção',
+                    x=testador_stats['Responsavel pelo teste'],
+                    y=testador_stats['Taxa_Deteccao'],
+                    mode='lines+markers',
+                    marker_color='red',
+                    line=dict(width=3),
+                    text=[f"{val:.1f}%" for val in testador_stats['Taxa_Deteccao']],
+                    textposition='top center'
+                ))
+                
+                fig_taxa.add_trace(go.Scatter(
+                    name='Taxa de Aprovação',
+                    x=testador_stats['Responsavel pelo teste'],
+                    y=testador_stats['Taxa_Aprovacao'],
+                    mode='lines+markers',
+                    marker_color='green',
+                    line=dict(width=3),
+                    text=[f"{val:.1f}%" for val in testador_stats['Taxa_Aprovacao']],
+                    textposition='bottom center'
+                ))
+                
+                fig_taxa.update_layout(
+                    title="📈 Comparativo de Taxas de Performance",
+                    xaxis_title="Testador",
+                    yaxis_title="Percentual (%)",
+                    margin=dict(t=50, b=50, l=50, r=50),
+                    height=400
+                )
+                
+                st.plotly_chart(fig_taxa, use_container_width=True, key="comparativo_taxas")
+            
 
         
-        st.markdown("---")
-        st.subheader("📋 Dados Detalhados dos Testes")
-        st.markdown("*Visualização completa dos dados de testes realizados pelo time de Q.A*")
-        if st.checkbox("Mostrar dados dos testes efetuados", key="show_data_checkbox"):
-            st.dataframe(df_com_teste, use_container_width=True)
-            st.caption(f"Total de testes efetuados exibidos: {len(df_com_teste)}")
-    
+        with tab4:
+            st.markdown("### 📋 **Dados Detalhados**")
+            st.markdown("*Visualização completa dos dados de testes realizados pelo time de Q.A*")
+            
+            if st.checkbox("Mostrar dados dos testes efetuados", key="show_data_checkbox"):
+                st.dataframe(df_com_teste, use_container_width=True)
+                st.caption(f"Total de testes efetuados exibidos: {len(df_com_teste)}")
+            
+            if not df_sem_teste.empty:
+                st.markdown("---")
+                st.markdown("#### 📊 **Tarefas Sem Teste**")
+                if st.checkbox("Mostrar tarefas sem teste", key="show_sem_teste_checkbox"):
+                    st.dataframe(df_sem_teste, use_container_width=True)
+                    st.caption(f"Total de tarefas sem teste: {len(df_sem_teste)}")
     else:
         st.info("👆 Faça upload de um arquivo Excel para começar a análise")
         st.markdown("""
@@ -900,11 +1038,12 @@ def main():
         - **ID**: Identificador único da task
         
         ### 📊 Funcionalidades do Dashboard:
-        - **Métricas Gerais**: Taxa de aprovação, tasks rejeitadas, período analisado
-        - **Filtros Avançados**: Por sprint, status e time
-        - **Análise de Qualidade**: Motivos de rejeição e performance dos desenvolvedores
-        - **Visualizações**: Gráficos interativos com informações detalhadas
-        - **Evolução Temporal**: Acompanhamento da qualidade ao longo do tempo
+        - **KPIs Executivos**: Métricas estratégicas para apresentação à diretoria
+        - **Análise Operacional**: Visão técnica detalhada para gestores
+        - **Performance da Equipe**: Métricas individuais dos testadores
+        - **Dados Detalhados**: Visualização completa dos dados
+        - **Filtros Avançados**: Por sprint, status, time e período
+        - **Visualizações Interativas**: Gráficos com informações detalhadas
         """)
 
 if __name__ == "__main__":
