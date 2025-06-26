@@ -32,7 +32,7 @@ def processar_dados(df):
     if 'Status' in df.columns:
         df['Status'] = df['Status'].replace('PRONTO PARA PUBLICAÇÃO', 'APROVADA')
     
-    colunas_esperadas = ['Data', 'Sprint', 'Time', 'Nome da Task', 'Link da task', 
+    colunas_esperadas = ['Data', 'Sprint', 'Time', 'Nome da Task', 'Link da Task', 
                         'Status', 'Responsável', 'Motivo', 'Motivo2', 'Motivo3', 
                         'Responsavel pelo teste', 'ID']
     
@@ -129,7 +129,7 @@ def grafico_status_distribuicao(df_filtrado):
             values=status_counts.values, 
             names=status_counts.index,
             title="🎯 Resultado dos Testes de Qualidade",
-            color_discrete_sequence=px.colors.qualitative.Set3
+            color_discrete_sequence=['#4ECDC4', '#45B7D1', '#6C5CE7', '#96CEB4', '#FECA57']
         )
         fig.update_traces(
             textinfo='label+percent+value',
@@ -239,7 +239,7 @@ def grafico_motivos_rejeicao(df_filtrado):
                     title="🔍 Principais Problemas Detectados pelo Q.A",
                     labels={'x': 'Bugs Identificados', 'y': 'Tipo de Problema'},
                     color=motivos_counts.values,
-                    color_continuous_scale='reds',
+                    color_continuous_scale=['#4ECDC4', '#45B7D1', '#6C5CE7'],
                     text=motivos_counts.values
                 )
                 fig.update_layout(
@@ -271,7 +271,7 @@ def grafico_rejeicoes_por_dev(df_filtrado):
                     title="👨‍💻 Desenvolvedores com Mais Rejeições (min. 3 tasks)",
                     labels={'Responsável': 'Desenvolvedor', 'Total_Rejeicoes': 'Total de Rejeições'},
                     color='Percentual_Rejeicao',
-                    color_continuous_scale='reds',
+                    color_continuous_scale=['#4ECDC4', '#45B7D1', '#6C5CE7'],
                     text='Total_Rejeicoes',
                     hover_data={'Percentual_Rejeicao': ':.1f'}
                 )
@@ -322,7 +322,7 @@ def grafico_erros_por_time(df_filtrado):
                 title="🚨 Quantidade de Bugs Identificados por Time",
                 labels={'x': 'Time de Desenvolvimento', 'y': 'Bugs Identificados'},
                 color=erros_por_time.values,
-                color_continuous_scale='reds',
+                color_continuous_scale=['#4ECDC4', '#45B7D1', '#6C5CE7'],
                 text=erros_por_time.values
             )
             fig.update_layout(
@@ -365,7 +365,7 @@ def grafico_distribuicao_bugs_tipo(df_filtrado):
                     values=motivos_counts.values,
                     names=motivos_counts.index,
                     title="🔍 Distribuição dos Tipos de Bugs Mais Comuns",
-                    color_discrete_sequence=px.colors.qualitative.Set2
+                    color_discrete_sequence=['#4ECDC4', '#45B7D1', '#6C5CE7', '#96CEB4', '#FECA57']
                 )
                 fig.update_layout(
                     margin=dict(t=50, b=50, l=100, r=50),
@@ -435,7 +435,7 @@ def grafico_taxa_rejeicao_por_time(df_filtrado):
                     title="📊 Taxa de Rejeição por Time (min. 3 tasks)",
                     labels={'Time': 'Time de Desenvolvimento', 'Taxa_Rejeicao': 'Taxa de Rejeição (%)'},
                     color='Taxa_Rejeicao',
-                    color_continuous_scale='reds',
+                    color_continuous_scale=['#4ECDC4', '#45B7D1', '#6C5CE7'],
                     text='Taxa_Rejeicao'
                 )
                 fig.update_layout(
@@ -480,7 +480,7 @@ def grafico_comparativo_testadores(df_filtrado):
                 y=testador_stats['Bugs_Encontrados'],
                 yaxis='y',
                 offsetgroup=2,
-                marker_color='red'
+                marker_color='#FF6B6B'
             ))
             
             fig.add_trace(go.Scatter(
@@ -698,9 +698,11 @@ def main():
         layout="wide"
     )
     
-    st.title("🔍 Dashboard Q.A DelTech - Métricas de Qualidade")
-    st.markdown("## 🎯 Dashboard Executivo - Apresentação para Diretoria")
-    st.markdown("*Demonstrando o valor agregado pelo time de Q.A na entrega de software de qualidade*")
+    # Título principal
+    st.title("📊 Painel de Métricas de Qualidade")
+    
+    # Subtítulo será atualizado após aplicar filtros
+    placeholder_subtitulo = st.empty()
     st.markdown("---")
     
     df = carregar_dados()
@@ -776,24 +778,59 @@ def main():
         df_original = df_filtrado if filtros_ativos else df
         df_com_teste, df_sem_teste = separar_dados_sem_teste(df_original)
         
+        # Atualizar subtítulo dinâmico
+        if data_range and len(data_range) == 2:
+            periodo_texto = f"{data_range[0].strftime('%d/%m')} a {data_range[1].strftime('%d/%m')}"
+        else:
+            periodo_texto = "Período completo"
+        
+        data_atualizacao = datetime.now().strftime("%B %Y")
+        placeholder_subtitulo.markdown(
+            f"**Período filtrado:** {periodo_texto} | **Dados atualizados até:** {data_atualizacao}"
+        )
+        
         if filtros_ativos and not df_com_teste.empty:
             st.info(f"Mostrando {len(df_com_teste)} testes efetuados de {len(df_original)} registros totais.")
         
         st.markdown("---")
         
         # Criar abas para organizar o dashboard
-        tab1, tab2, tab3, tab4 = st.tabs(["📈 KPIs Executivos", "📊 Análise Operacional", "👥 Performance da Equipe", "📋 Dados Detalhados"])
+        tab1, tab2, tab3, tab4 = st.tabs(["📌 Visão Geral Estratégica", "🛡️ Prevenção e Qualidade", "🏁 Visão por Sprint", "🧑‍🤝‍🧑 Visão por Testador"])
         
         with tab1:
-            st.markdown("### 🎯 **Métricas Estratégicas para Diretoria**")
-            st.markdown("*Demonstrando o valor e ROI do investimento em Quality Assurance*")
+            st.markdown("### 📌 **Visão Geral Estratégica**")
+            st.markdown("*Valor economizado, cobertura e impacto do time de Q.A*")
             
             # Métricas executivas principais
             metricas_resumo(df_com_teste, df, df_sem_teste)
             
             st.markdown("---")
             
-            # Gráficos executivos específicos
+            # ROI e Insights destacados
+            st.markdown("#### 💡 **Insights Estratégicos**")
+            
+            # Calcular métricas para insights
+            total_bugs = contar_total_bugs(df_com_teste[df_com_teste['Status'] == 'REJEITADA']) if not df_com_teste.empty else 0
+            times_atendidos = len(df_com_teste['Time'].dropna().unique()) if 'Time' in df_com_teste.columns else 0
+            qas_ativos = len(df_com_teste['Responsavel pelo teste'].dropna().unique()) if 'Responsavel pelo teste' in df_com_teste.columns else 0
+            
+            col_insight1, col_insight2 = st.columns(2)
+            
+            with col_insight1:
+                st.info(f"💰 **ROI Visível:** Interceptamos {total_bugs} falhas críticas, evitando até {total_bugs * 10}x o custo potencial — com apenas {qas_ativos} QAs ativos.")
+            
+            with col_insight2:
+                if not df_com_teste.empty and 'Time' in df_com_teste.columns:
+                    bugs_por_time = contar_bugs_por_time(df_com_teste[df_com_teste['Status'] == 'REJEITADA'])
+                    if not bugs_por_time.empty:
+                        time_critico = bugs_por_time.index[0]
+                        bugs_time_critico = bugs_por_time.iloc[0]
+                        percentual = (bugs_time_critico / total_bugs * 100) if total_bugs > 0 else 0
+                        st.warning(f"🚨 **Problemas Concentrados:** O time {time_critico} representa {bugs_time_critico} dos {total_bugs} bugs ({percentual:.1f}%) — foco de risco identificado.")
+            
+            st.markdown("---")
+            
+            # Gráficos estratégicos
             st.markdown("#### 📊 **Indicadores Visuais Estratégicos**")
             
             col_exec1, col_exec2 = st.columns(2)
@@ -821,76 +858,204 @@ def main():
                     st.plotly_chart(fig_taxa_rejeicao, use_container_width=True, key="taxa_rejeicao_exec")
         
         with tab2:
-            st.markdown("### 📊 **Análise Operacional Detalhada**")
-            st.markdown("*Visão técnica e operacional para gestores de Q.A e desenvolvimento*")
+            st.markdown("### 🛡️ **Prevenção e Qualidade**")
+            st.markdown("*Bugs identificados, tipos de falha e taxas de aprovação*")
             
-            # Visão geral operacional
-            st.markdown("#### 📊 **Visão Geral dos Testes**")
-            col1, col2 = st.columns(2)
+            # Análise de bugs e qualidade
+            st.markdown("#### 🚨 **Bugs Identificados por Time**")
             
-            with col1:
-                fig1 = grafico_tasks_por_sprint(df_com_teste)
-                if fig1:
-                    st.plotly_chart(fig1, use_container_width=True, key="tasks_por_sprint")
-                
-                fig3 = grafico_tasks_por_time(df_com_teste)
-                if fig3:
-                    st.plotly_chart(fig3, use_container_width=True, key="tasks_por_time")
+            col_bugs1, col_bugs2 = st.columns(2)
             
-            with col2:
-                fig2 = grafico_status_distribuicao(df_com_teste)
-                if fig2:
-                    st.plotly_chart(fig2, use_container_width=True, key="tasks_por_responsavel")
-                
-                fig5 = grafico_timeline_tasks(df_com_teste)
-                if fig5:
-                    st.plotly_chart(fig5, use_container_width=True, key="tasks_por_status")
-            
-            st.markdown("---")
-            st.markdown("#### 🔍 **Análise de Qualidade e Bugs**")
-            
-            col3, col4 = st.columns(2)
-            
-            with col3:
-                fig_motivos = grafico_motivos_rejeicao(df_com_teste)
-                if fig_motivos:
-                    st.plotly_chart(fig_motivos, use_container_width=True, key="motivos_rejeicao")
-                
+            with col_bugs1:
+                # Gráfico de barras para bugs por time
                 fig_erros_time = grafico_erros_por_time(df_com_teste)
                 if fig_erros_time:
-                    st.plotly_chart(fig_erros_time, use_container_width=True, key="erros_por_time_op")
+                    # Melhorar cores e adicionar anotações
+                    try:
+                        if (fig_erros_time.data and len(fig_erros_time.data) > 0 and 
+                            hasattr(fig_erros_time.data[0], 'y') and 
+                            hasattr(fig_erros_time.data[0], 'x') and 
+                            fig_erros_time.data[0].y is not None and 
+                            len(fig_erros_time.data[0].y) > 0):
+                            
+                            y_values = list(fig_erros_time.data[0].y)
+                            x_values = list(fig_erros_time.data[0].x)
+                            fig_erros_time.update_traces(
+                                marker_color=['#FF6B6B' if i == 0 else '#4ECDC4' for i in range(len(x_values))],
+                                text=[f'🚨 Foco prioritário' if i == 0 else f'✅ {y_values[i]} bugs' for i in range(len(x_values))],
+                                textposition='outside'
+                            )
+                        else:
+                            fig_erros_time.update_traces(
+                                marker_color='#4ECDC4'
+                            )
+                    except (AttributeError, IndexError, TypeError):
+                        # Fallback para casos onde os dados não estão no formato esperado
+                        fig_erros_time.update_traces(
+                            marker_color='#4ECDC4'
+                        )
+                    fig_erros_time.update_layout(title_font_color='#FFFFFF')
+                    st.plotly_chart(fig_erros_time, use_container_width=True, key="bugs_por_time_principal")
             
-            with col4:
-                fig_distribuicao_bugs = grafico_distribuicao_bugs_tipo(df_com_teste)
-                if fig_distribuicao_bugs:
-                    st.plotly_chart(fig_distribuicao_bugs, use_container_width=True, key="distribuicao_bugs")
-                
-                fig_taxa_rejeicao_time = grafico_taxa_rejeicao_por_time(df_com_teste)
-                if fig_taxa_rejeicao_time:
-                    st.plotly_chart(fig_taxa_rejeicao_time, use_container_width=True, key="taxa_rejeicao_time")
+            with col_bugs2:
+                # Gráfico de pizza para distribuição de bugs
+                if not df_com_teste.empty and 'Time' in df_com_teste.columns:
+                    df_rejeitadas = df_com_teste[df_com_teste['Status'] == 'REJEITADA']
+                    if not df_rejeitadas.empty:
+                        bugs_por_time = contar_bugs_por_time(df_rejeitadas)
+                        if not bugs_por_time.empty:
+                            import plotly.express as px
+                            fig_pizza = px.pie(
+                                values=bugs_por_time.values,
+                                names=bugs_por_time.index,
+                                title="🥧 Distribuição de Bugs por Time",
+                                color_discrete_sequence=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4']
+                            )
+                            fig_pizza.update_layout(title_font_color='#FFFFFF')
+                            st.plotly_chart(fig_pizza, use_container_width=True, key="distribuicao_bugs_pizza")
             
             st.markdown("---")
-            st.markdown("#### 📊 **Análise de Performance e Tendências**")
+            st.markdown("#### 🔍 **Tipos de Falha e Motivos**")
             
-            col5, col6 = st.columns(2)
+            col_motivos1, col_motivos2 = st.columns(2)
             
-            with col5:
-                fig_taxa_dev = grafico_rejeicoes_por_dev(df_com_teste)
-                if fig_taxa_dev:
-                    st.plotly_chart(fig_taxa_dev, use_container_width=True, key="taxa_desenvolvimento")
-                
-                fig_evolucao = grafico_evolucao_qualidade(df_com_teste)
-                if fig_evolucao:
-                    st.plotly_chart(fig_evolucao, use_container_width=True, key="evolucao_tendencias")
+            with col_motivos1:
+                # Tipo de falha mais comum
+                fig_motivos = grafico_motivos_rejeicao(df_com_teste)
+                if fig_motivos:
+                    # Melhorar cores e destacar o mais comum
+                    fig_motivos.update_traces(
+                        marker_color=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57'],
+                        text=[f'✅ Mais comum' if i == 0 else '' for i in range(len(fig_motivos.data[0].x))],
+                        textposition='outside'
+                    )
+                    fig_motivos.update_layout(title_font_color='#FFFFFF')
+                    st.plotly_chart(fig_motivos, use_container_width=True, key="motivos_rejeicao_principal")
             
-            with col6:
-                fig_heatmap = grafico_heatmap_atividade(df_com_teste)
-                if fig_heatmap:
-                    st.plotly_chart(fig_heatmap, use_container_width=True, key="heatmap_atividade")
+            with col_motivos2:
+                # Taxa de aprovação vs rejeição (barras + pizza)
+                if not df_com_teste.empty and 'Status' in df_com_teste.columns:
+                    status_counts = df_com_teste['Status'].value_counts()
+                    if len(status_counts) > 1:
+                        import plotly.express as px
+                        fig_aprovacao = px.bar(
+                            x=status_counts.index,
+                            y=status_counts.values,
+                            title="📊 Taxa de Aprovação vs Rejeição",
+                            color=status_counts.values,
+                            color_discrete_sequence=['#4ECDC4', '#FF6B6B'],
+                            text=status_counts.values
+                        )
+                        fig_aprovacao.update_traces(textposition='outside')
+                        fig_aprovacao.update_layout(
+                            title_font_color='#FFFFFF',
+                            xaxis_title="Status",
+                            yaxis_title="Quantidade"
+                        )
+                        st.plotly_chart(fig_aprovacao, use_container_width=True, key="taxa_aprovacao_barras")
+            
+            st.markdown("---")
+            st.markdown("#### 📈 **Evolução de Taxa ao Longo do Tempo**")
+            
+            # Melhorar gráfico de evolução
+            fig_evolucao = grafico_evolucao_qualidade(df_com_teste)
+            if fig_evolucao:
+                # Melhorar escala do eixo Y para mostrar variações reais
+                fig_evolucao.update_layout(
+                    yaxis=dict(
+                        title="Taxa de Aprovação (%)",
+                        range=[0, 100],
+                        dtick=10
+                    ),
+                    title_font_color='#FFFFFF',
+                    annotations=[
+                        dict(
+                            x=0.5, y=1.1,
+                            xref='paper', yref='paper',
+                            text="💡 Dica: Busque tendência de melhoria contínua",
+                            showarrow=False,
+                            font=dict(size=12, color='#7F8C8D')
+                        )
+                    ]
+                )
+                st.plotly_chart(fig_evolucao, use_container_width=True, key="evolucao_qualidade_melhorada")
         
         with tab3:
-            st.markdown("### 👥 **Performance da Equipe Q.A**")
-            st.markdown("*Análise detalhada da performance individual e comparativa dos testadores*")
+            st.markdown("### 🏁 **Visão por Sprint**")
+            st.markdown("*Tasks testadas por sprint e cobertura de Q.A por time*")
+            
+            # Análise por Sprint
+            st.markdown("#### 📊 **Tasks Testadas por Sprint**")
+            
+            col_sprint1, col_sprint2 = st.columns(2)
+            
+            with col_sprint1:
+                fig_sprint = grafico_tasks_por_sprint(df_com_teste)
+                if fig_sprint:
+                    try:
+                        if (fig_sprint.data and len(fig_sprint.data) > 0 and 
+                            hasattr(fig_sprint.data[0], 'y') and 
+                            hasattr(fig_sprint.data[0], 'x') and 
+                            fig_sprint.data[0].y is not None and 
+                            len(fig_sprint.data[0].y) > 0):
+                            
+                            # Melhorar cores e adicionar anotações
+                            y_values = list(fig_sprint.data[0].y)
+                            max_idx = y_values.index(max(y_values)) if y_values else 0
+                            fig_sprint.update_traces(
+                                marker_color=['#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF6B6B'],
+                                text=[f'🏆 Melhor performance' if i == max_idx else f'{y_values[i]} tasks' for i in range(len(y_values))],
+                                textposition='outside'
+                            )
+                        else:
+                            # Caso básico sem anotações especiais
+                            fig_sprint.update_traces(
+                                marker_color=['#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF6B6B']
+                            )
+                    except (AttributeError, IndexError, TypeError):
+                        # Fallback para casos onde os dados não estão no formato esperado
+                        fig_sprint.update_traces(
+                            marker_color=['#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF6B6B']
+                        )
+                
+                if fig_sprint:
+                    fig_sprint.update_layout(
+                        title_font_color='#FFFFFF',
+                        xaxis_tickangle=45
+                    )
+                    st.plotly_chart(fig_sprint, use_container_width=True, key="tasks_sprint_principal")
+            
+            with col_sprint2:
+                # Timeline de tasks
+                fig_timeline = grafico_timeline_tasks(df_com_teste)
+                if fig_timeline:
+                    fig_timeline.update_layout(title_font_color='#FFFFFF')
+                    st.plotly_chart(fig_timeline, use_container_width=True, key="timeline_tasks")
+            
+            st.markdown("---")
+            st.markdown("#### 🎯 **Cobertura de Q.A por Time**")
+            
+            col_cobertura1, col_cobertura2 = st.columns(2)
+            
+            with col_cobertura1:
+                fig_time = grafico_tasks_por_time(df_com_teste)
+                if fig_time:
+                    fig_time.update_layout(
+                        title_font_color='#FFFFFF',
+                        xaxis_tickangle=45
+                    )
+                    st.plotly_chart(fig_time, use_container_width=True, key="tasks_por_time_sprint")
+            
+            with col_cobertura2:
+                # Distribuição de status
+                fig_status = grafico_status_distribuicao(df_com_teste)
+                if fig_status:
+                    fig_status.update_layout(title_font_color='#FFFFFF')
+                    st.plotly_chart(fig_status, use_container_width=True, key="status_distribuicao_sprint")
+        
+        with tab4:
+            st.markdown("### 🧑‍🤝‍🧑 **Visão por Testador**")
+            st.markdown("*Ranking de performance, produtividade e comparação entre testadores*")
             
             if 'Responsavel pelo teste' in df_com_teste.columns and not df_com_teste.empty:
                 testador_stats = df_com_teste.groupby('Responsavel pelo teste').agg({
@@ -902,6 +1067,71 @@ def main():
                 testador_stats['Taxa_Aprovacao'] = (testador_stats['Testes_Aprovados'] / testador_stats['Total_Testes'] * 100).round(1)
                 testador_stats['Produtividade'] = testador_stats['Total_Testes']
                 testador_stats = testador_stats.reset_index()
+                
+                # Insights destacados
+                st.markdown("#### 💡 **Insights de Performance**")
+                
+                total_tarefas = testador_stats['Total_Testes'].sum()
+                media_aprovacao = testador_stats['Taxa_Aprovacao'].mean()
+                
+                col_insight1, col_insight2 = st.columns(2)
+                
+                with col_insight1:
+                    testadores_nomes = ' e '.join(testador_stats['Responsavel pelo teste'].tolist())
+                    st.success(f"🎯 **Eficiência por pessoa:** {testadores_nomes} juntos validaram {int(total_tarefas)} tarefas com taxa de aprovação média de {media_aprovacao:.1f}%.")
+                
+                with col_insight2:
+                    acima_media = testador_stats[testador_stats['Taxa_Aprovacao'] >= media_aprovacao]
+                    if len(acima_media) >= 2:
+                        st.info(f"⭐ **Qualidade similar:** Ambos testadores entregaram acima da média com qualidade similar — excelente consistência da equipe!")
+                
+                st.markdown("---")
+                st.markdown("#### 📊 **Comparação Visual de Performance**")
+                
+                # Gráfico de comparação
+                col_graf1, col_graf2 = st.columns(2)
+                
+                with col_graf1:
+                    # Gráfico de barras comparativo - Produtividade
+                    import plotly.express as px
+                    fig_prod = px.bar(
+                        testador_stats,
+                        x='Responsavel pelo teste',
+                        y='Total_Testes',
+                        title='📈 Comparativo de Produtividade',
+                        color='Total_Testes',
+                        color_continuous_scale=['#4ECDC4', '#45B7D1'],
+                        text='Total_Testes'
+                    )
+                    fig_prod.update_traces(textposition='outside')
+                    fig_prod.update_layout(
+                        title_font_color='#FFFFFF',
+                        xaxis_title='Testador',
+                        yaxis_title='Total de Testes',
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_prod, use_container_width=True, key="comparativo_produtividade")
+                
+                with col_graf2:
+                    # Gráfico de barras comparativo - Taxas
+                    fig_taxas = px.bar(
+                        testador_stats,
+                        x='Responsavel pelo teste',
+                        y=['Taxa_Aprovacao', 'Taxa_Deteccao'],
+                        title='📊 Comparativo de Taxas (%)',
+                        color_discrete_sequence=['#4ECDC4', '#FF6B6B'],
+                        barmode='group'
+                    )
+                    fig_taxas.update_layout(
+                        title_font_color='#FFFFFF',
+                        xaxis_title='Testador',
+                        yaxis_title='Percentual (%)',
+                        legend_title='Métricas'
+                    )
+                    st.plotly_chart(fig_taxas, use_container_width=True, key="comparativo_taxas")
+                
+                st.markdown("---")
+                st.markdown("#### 🏆 **Ranking Detalhado de Performance**")
             
                 col1, col2 = st.columns(2)
                 
@@ -968,7 +1198,7 @@ def main():
                     height=400
                 )
                 
-                st.plotly_chart(fig_comp, use_container_width=True, key="comparativo_produtividade")
+                st.plotly_chart(fig_comp, use_container_width=True, key="comparativo_produtividade_detalhado")
                 
                 fig_taxa = go.Figure()
                 
@@ -1002,7 +1232,7 @@ def main():
                     height=400
                 )
                 
-                st.plotly_chart(fig_taxa, use_container_width=True, key="comparativo_taxas")
+                st.plotly_chart(fig_taxa, use_container_width=True, key="comparativo_taxas_detalhado")
             
 
         
