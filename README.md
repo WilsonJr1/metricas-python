@@ -1,35 +1,21 @@
 
-# Dashboard Q.A DelTech 🔍
+# Dashboard de Métricas Q.A DelTech
 
-Dashboard interativo para análise de tasks testadas pelo time de Q.A DelTech, desenvolvido com Streamlit e Plotly.
+Dashboard interativo para análise de métricas de qualidade e performance da equipe de Q.A.
 
-## 🚀 Demo Online
+## Funcionalidades
 
-**[Acesse o Dashboard](https://seu-app.streamlit.app)** *(link será gerado após deploy)*
-
-## ✨ Funcionalidades
-
-- **📊 Interface web moderna** com Streamlit
-- **📈 Gráficos interativos** com Plotly
-- **📋 Upload de planilhas Excel** (.xlsx, .xls)
-- **🔍 Análise completa** de tasks por sprint, time, status e responsável
-- **📊 Métricas em tempo real**:
-  - Total de tasks na planilha
-  - Testes efetuados
-  - Tasks sem teste
-  - Bugs identificados
-- **🎯 Filtros avançados** por período, sprint e responsável
-- **📅 Timeline de tasks** com visualização temporal
-- **🔥 Heatmap** de sprint vs status
-- **📋 Análise de motivos** mais frequentes para rejeição
-- **📱 Design responsivo** para desktop e mobile
+- **Visão Geral Estratégica**: KPIs executivos e métricas principais
+- **Prevenção e Qualidade**: Análise de rejeições e problemas detectados
+- **Visão por Sprint**: Performance por sprint e evolução temporal
+- **Visão por Testador**: Métricas individuais da equipe
+- **Tarefas Sem Teste**: Análise de tarefas que não passaram por testes
 
 ## 🛠️ Tecnologias
 
 - **Python 3.7+**
 - **Streamlit** - Framework web para aplicações de dados
 - **Plotly** - Biblioteca para gráficos interativos
-- **Pandas** - Manipulação e análise de dados
 - **OpenPyXL** - Leitura de arquivos Excel
 - **NumPy** - Computação numérica
 
@@ -132,6 +118,23 @@ Data       | Nome    | Valor | Sprint
 ├── 📄 README.md             # 📖 Documentação do projeto
 └── 📄 .gitignore            # 🚫 Arquivos ignorados pelo Git
 ```
+
+## Estrutura de Dados
+
+O dashboard espera um arquivo Excel com as seguintes colunas:
+
+- **Data**: Data da task
+- **Sprint**: Número do sprint
+- **Time**: Nome do time responsável
+- **Nome da Task**: Título da task
+- **Link da task**: URL da task
+- **Status**: APROVADA, REJEITADA ou PRONTO PARA PUBLICAÇÃO
+- **Responsável**: Desenvolvedor responsável
+- **Motivo**: Primeiro motivo (se rejeitada)
+- **Motivo2**: Segundo motivo (se rejeitada)
+- **Motivo3**: Terceiro motivo (se rejeitada)
+- **Responsavel pelo teste**: Testador responsável
+- **ID**: Identificador único da task
 
 ## 📋 Formato da Planilha
 

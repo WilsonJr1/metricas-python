@@ -97,30 +97,7 @@ def contar_total_bugs(df_rejeitadas):
     
     return total_bugs
 
-def grafico_tasks_por_sprint(df_filtrado):
-    if 'Sprint' in df_filtrado.columns:
-        sprint_counts = df_filtrado['Sprint'].value_counts()
-        # Ordenar sprints numericamente (Sprint 1, Sprint 2, etc.)
-        sprint_order = sorted(sprint_counts.index, key=lambda x: int(x.split()[-1]) if x.split()[-1].isdigit() else float('inf'))
-        sprint_counts = sprint_counts.reindex(sprint_order)
-        
-        fig = px.bar(
-            x=sprint_counts.index, 
-            y=sprint_counts.values,
-            title="📊 Tasks Testadas por Sprint pelo Q.A",
-            labels={'x': 'Sprint', 'y': 'Tasks Testadas'},
-            color=sprint_counts.values,
-            color_continuous_scale='viridis',
-            text=sprint_counts.values
-        )
-        fig.update_layout(
-            showlegend=False,
-            margin=dict(t=50, b=50, l=100, r=50),
-            height=400
-        )
-        fig.update_traces(textposition='outside', hovertemplate='Sprint: %{x}<br>Tasks Testadas: %{y}<extra></extra>')
-        return fig
-    return None
+
 
 def grafico_status_distribuicao(df_filtrado):
     if 'Status' in df_filtrado.columns:
@@ -151,10 +128,11 @@ def grafico_tasks_por_time(df_filtrado):
             color_continuous_scale='plasma',
             text=time_counts.values
         )
+        fig.update_coloraxes(colorbar_title="Quantidade de Tasks")
         fig.update_layout(
             showlegend=False, 
-            height=max(400, len(time_counts) * 40),
-            margin=dict(t=50, b=50, l=150, r=100)
+            height=max(450, len(time_counts) * 45),
+            margin=dict(t=50, b=80, l=200, r=150)
         )
         fig.update_traces(textposition='outside', hovertemplate='Time: %{y}<br>Tasks Testadas: %{x}<extra></extra>')
         return fig
@@ -184,7 +162,8 @@ def grafico_responsavel_performance(df_filtrado):
                 xaxis_title="Tasks Testadas",
                 yaxis_title="Testador Q.A",
                 barmode='stack',
-                height=max(400, len(perf_data) * 30)
+                height=max(450, len(perf_data) * 35),
+                margin=dict(t=50, b=80, l=200, r=150)
             )
             return fig
     return None
@@ -205,6 +184,10 @@ def grafico_timeline_tasks(df_filtrado):
                 title="📈 Evolução dos Testes de Qualidade",
                 labels={'Count': 'Tasks Testadas por Dia', 'Mes': 'Mês'},
                 text='Count'
+            )
+            fig.update_layout(
+                margin=dict(t=50, b=80, l=80, r=80),
+                height=450
             )
             fig.update_xaxes(tickangle=45)
             fig.update_traces(textposition='outside', hovertemplate='Mês: %{x}<br>Status: %{legendgroup}<br>Tasks Testadas: %{y}<extra></extra>')
@@ -233,20 +216,24 @@ def grafico_motivos_rejeicao(df_filtrado):
                 else:
                     return None
                 fig = px.bar(
-                    x=motivos_counts.values,
                     y=motivos_counts.index,
+                    x=motivos_counts.values,
                     orientation='h',
                     title="🔍 Principais Problemas Detectados pelo Q.A",
                     labels={'x': 'Bugs Identificados', 'y': 'Tipo de Problema'},
-                    color=motivos_counts.values,
-                    color_continuous_scale=['#4ECDC4', '#45B7D1', '#6C5CE7'],
                     text=motivos_counts.values
                 )
-                fig.update_layout(
-                    margin=dict(t=50, b=50, l=200, r=100),
-                    height=max(400, len(motivos_counts) * 35)
+                fig.update_traces(
+                    marker_color='#4ECDC4',
+                    textposition='outside',
+                    texttemplate='%{x}',
+                    textfont_size=12,
+                    hovertemplate='Problema: %{y}<br>Ocorrências: %{x}<extra></extra>'
                 )
-                fig.update_traces(textposition='outside', hovertemplate='Problema: %{y}<br>Ocorrências: %{x}<extra></extra>')
+                fig.update_layout(
+                    margin=dict(t=50, b=80, l=250, r=150),
+                    height=max(450, len(motivos_counts) * 40)
+                )
                 return fig
     return None
 
@@ -275,9 +262,10 @@ def grafico_rejeicoes_por_dev(df_filtrado):
                     text='Total_Rejeicoes',
                     hover_data={'Percentual_Rejeicao': ':.1f'}
                 )
+                fig.update_coloraxes(colorbar_title="Taxa de Rejeição (%)")
                 fig.update_layout(
-                    margin=dict(t=50, b=120, l=150, r=50),
-                    height=500
+                    margin=dict(t=50, b=150, l=150, r=80),
+                    height=550
                 )
                 fig.update_xaxes(tickangle=45)
                 fig.update_traces(textposition='outside')
@@ -325,10 +313,11 @@ def grafico_erros_por_time(df_filtrado):
                 color_continuous_scale=['#4ECDC4', '#45B7D1', '#6C5CE7'],
                 text=erros_por_time.values
             )
+            fig.update_coloraxes(colorbar_title="Quantidade de Bugs")
             fig.update_layout(
                 showlegend=False,
-                margin=dict(t=50, b=80, l=120, r=50),
-                height=400
+                margin=dict(t=50, b=120, l=120, r=80),
+                height=450
             )
             fig.update_traces(
                 textposition='outside',
@@ -405,9 +394,10 @@ def grafico_heatmap_atividade(df_filtrado):
                 fig = px.imshow(
                     pivot_data,
                     title="📅 Heatmap de Atividade de Testes por Semana",
-                    labels={'x': 'Semana do Ano', 'y': 'Dia da Semana', 'color': 'Testes Realizados'},
+                    labels={'x': 'Semana do Ano', 'y': 'Dia da Semana', 'color': 'Quantidade de Testes'},
                     color_continuous_scale='Blues'
                 )
+                fig.update_coloraxes(colorbar_title="Quantidade de Testes")
                 fig.update_layout(
                     margin=dict(t=50, b=50, l=100, r=50),
                     height=400
@@ -438,9 +428,10 @@ def grafico_taxa_rejeicao_por_time(df_filtrado):
                     color_continuous_scale=['#4ECDC4', '#45B7D1', '#6C5CE7'],
                     text='Taxa_Rejeicao'
                 )
+                fig.update_coloraxes(colorbar_title="Taxa de Rejeição (%)")
                 fig.update_layout(
-                    margin=dict(t=50, b=80, l=120, r=50),
-                    height=400
+                    margin=dict(t=50, b=120, l=120, r=80),
+                    height=450
                 )
                 fig.update_traces(
                     texttemplate='%{text}%',
@@ -511,7 +502,6 @@ def grafico_comparativo_testadores(df_filtrado):
 def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
     # Cabeçalho executivo
     st.markdown("#### 📈 **Resumo Executivo - Impacto do Time de Qualidade**")
-    st.markdown("*Demonstrando o valor agregado e ROI do investimento em Quality Assurance*")
     
     # Cálculos principais
     total_planilha = len(df_original)
@@ -525,7 +515,7 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
     
     # === SEÇÃO 1: MÉTRICAS DE VOLUME E COBERTURA ===
     st.markdown("##### 🎯 **Volume de Trabalho e Cobertura**")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         cobertura_teste = (total_testes_efetuados / total_planilha * 100) if total_planilha > 0 else 0
@@ -560,21 +550,11 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
             help="Número de times de desenvolvimento com cobertura de Q.A"
         )
     
-    with col4:
-        if 'Responsavel pelo teste' in df_filtrado.columns:
-            testadores_ativos = df_filtrado['Responsavel pelo teste'].nunique()
-        else:
-            testadores_ativos = 0
-        st.metric(
-            "👥 Equipe Q.A Ativa", 
-            f"{testadores_ativos}",
-            delta="profissionais envolvidos",
-            help="Número de profissionais de Q.A ativamente testando"
-        )
+    # Removido: Equipe Q.A Ativa
     
     # === SEÇÃO 2: IMPACTO NA QUALIDADE ===
     st.markdown("##### 🛡️ **Impacto na Qualidade e Prevenção de Defeitos**")
-    col5, col6, col7, col8 = st.columns(4)
+    col5, col6, col7 = st.columns(3)
     
     with col5:
         st.metric(
@@ -602,15 +582,7 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
             help="Percentual de testes que passaram na primeira validação"
         )
     
-    with col8:
-        # Estimativa de valor economizado (bugs em produção custam 10x mais para corrigir)
-        valor_economizado = total_bugs_encontrados * 10
-        st.metric(
-            "💰 Valor Economizado", 
-            f"{valor_economizado:,}x",
-            delta="custo evitado (estimativa)",
-            help="Estimativa de economia baseada no custo 10x maior de correção em produção"
-        )
+    # Removido: Valor Economizado
     
     # === SEÇÃO 3: ANÁLISE DE RISCOS E PONTOS CRÍTICOS ===
     st.markdown("##### ⚠️ **Análise de Riscos e Pontos de Atenção**")
@@ -666,29 +638,8 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
             help="Percentual de tarefas que não receberam validação de qualidade"
         )
     
-    # === RESUMO EXECUTIVO ===
-    st.markdown("##### 📋 **Resumo para Diretoria**")
-    
-    # Criar métricas de resumo em formato mais executivo
-    col_resumo1, col_resumo2 = st.columns(2)
-    
-    with col_resumo1:
-        st.info(f"""
-        **🎯 EFETIVIDADE DO TIME Q.A:**
-        • **{total_bugs_encontrados:,} defeitos** interceptados antes da produção
-        • **{taxa_deteccao:.1f}%** de eficiência na detecção de problemas
-        • **{cobertura_teste:.1f}%** de cobertura nas tarefas de desenvolvimento
-        • **{times_atendidos} times** de desenvolvimento atendidos
-        """)
-    
-    with col_resumo2:
-        st.success(f"""
-        **💼 VALOR ENTREGUE:**
-        • **{valor_economizado:,}x** em custos evitados (estimativa)
-        • **{taxa_aprovacao:.1f}%** de taxa de aprovação na primeira validação
-        • **{testadores_ativos} profissionais** dedicados à qualidade
-        • **{tarefas_unicas:,} tarefas** validadas com sucesso
-        """)
+    # === RESUMO EXECUTIVO REMOVIDO ===
+    # Seção removida conforme solicitação
 
 
 def main():
@@ -795,38 +746,19 @@ def main():
         st.markdown("---")
         
         # Criar abas para organizar o dashboard
-        tab1, tab2, tab3, tab4 = st.tabs(["📌 Visão Geral Estratégica", "🛡️ Prevenção e Qualidade", "🏁 Visão por Sprint", "🧑‍🤝‍🧑 Visão por Testador"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📌 Visão Geral Estratégica", "🛡️ Prevenção e Qualidade", "🏁 Visão por Sprint", "🧑‍🤝‍🧑 Visão por Testador", "📋 Tarefas Sem Teste"])
         
         with tab1:
             st.markdown("### 📌 **Visão Geral Estratégica**")
-            st.markdown("*Valor economizado, cobertura e impacto do time de Q.A*")
+            st.markdown("*Cobertura e impacto do time de Q.A*")
             
             # Métricas executivas principais
             metricas_resumo(df_com_teste, df, df_sem_teste)
             
             st.markdown("---")
             
-            # ROI e Insights destacados
-            st.markdown("#### 💡 **Insights Estratégicos**")
-            
-            # Calcular métricas para insights
-            total_bugs = contar_total_bugs(df_com_teste[df_com_teste['Status'] == 'REJEITADA']) if not df_com_teste.empty else 0
-            times_atendidos = len(df_com_teste['Time'].dropna().unique()) if 'Time' in df_com_teste.columns else 0
-            qas_ativos = len(df_com_teste['Responsavel pelo teste'].dropna().unique()) if 'Responsavel pelo teste' in df_com_teste.columns else 0
-            
-            col_insight1, col_insight2 = st.columns(2)
-            
-            with col_insight1:
-                st.info(f"💰 **ROI Visível:** Interceptamos {total_bugs} falhas críticas, evitando até {total_bugs * 10}x o custo potencial — com apenas {qas_ativos} QAs ativos.")
-            
-            with col_insight2:
-                if not df_com_teste.empty and 'Time' in df_com_teste.columns:
-                    bugs_por_time = contar_bugs_por_time(df_com_teste[df_com_teste['Status'] == 'REJEITADA'])
-                    if not bugs_por_time.empty:
-                        time_critico = bugs_por_time.index[0]
-                        bugs_time_critico = bugs_por_time.iloc[0]
-                        percentual = (bugs_time_critico / total_bugs * 100) if total_bugs > 0 else 0
-                        st.warning(f"🚨 **Problemas Concentrados:** O time {time_critico} representa {bugs_time_critico} dos {total_bugs} bugs ({percentual:.1f}%) — foco de risco identificado.")
+            # === INSIGHTS ESTRATÉGICOS REMOVIDOS ===
+            # Seção removida conforme solicitação
             
             st.markdown("---")
             
@@ -950,7 +882,9 @@ def main():
                         fig_aprovacao.update_layout(
                             title_font_color='#FFFFFF',
                             xaxis_title="Status",
-                            yaxis_title="Quantidade"
+                            yaxis_title="Quantidade",
+                            margin=dict(t=50, b=80, l=80, r=80),
+                            height=450
                         )
                         st.plotly_chart(fig_aprovacao, use_container_width=True, key="taxa_aprovacao_barras")
             
@@ -987,45 +921,8 @@ def main():
             # Análise por Sprint
             st.markdown("#### 📊 **Tasks Testadas por Sprint**")
             
-            col_sprint1, col_sprint2 = st.columns(2)
-            
-            with col_sprint1:
-                fig_sprint = grafico_tasks_por_sprint(df_com_teste)
-                if fig_sprint:
-                    try:
-                        if (fig_sprint.data and len(fig_sprint.data) > 0 and 
-                            hasattr(fig_sprint.data[0], 'y') and 
-                            hasattr(fig_sprint.data[0], 'x') and 
-                            fig_sprint.data[0].y is not None and 
-                            len(fig_sprint.data[0].y) > 0):
-                            
-                            # Melhorar cores e adicionar anotações
-                            y_values = list(fig_sprint.data[0].y)
-                            max_idx = y_values.index(max(y_values)) if y_values else 0
-                            fig_sprint.update_traces(
-                                marker_color=['#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF6B6B'],
-                                text=[f'🏆 Melhor performance' if i == max_idx else f'{y_values[i]} tasks' for i in range(len(y_values))],
-                                textposition='outside'
-                            )
-                        else:
-                            # Caso básico sem anotações especiais
-                            fig_sprint.update_traces(
-                                marker_color=['#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF6B6B']
-                            )
-                    except (AttributeError, IndexError, TypeError):
-                        # Fallback para casos onde os dados não estão no formato esperado
-                        fig_sprint.update_traces(
-                            marker_color=['#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57', '#FF6B6B']
-                        )
-                
-                if fig_sprint:
-                    fig_sprint.update_layout(
-                        title_font_color='#FFFFFF',
-                        xaxis_tickangle=45
-                    )
-                    st.plotly_chart(fig_sprint, use_container_width=True, key="tasks_sprint_principal")
-            
-            with col_sprint2:
+            # Timeline de tasks
+            with st.container():
                 # Timeline de tasks
                 fig_timeline = grafico_timeline_tasks(df_com_teste)
                 if fig_timeline:
@@ -1104,12 +1001,16 @@ def main():
                         text='Total_Testes'
                     )
                     fig_prod.update_traces(textposition='outside')
+                    fig_prod.update_coloraxes(colorbar_title="Total de Testes")
                     fig_prod.update_layout(
                         title_font_color='#FFFFFF',
                         xaxis_title='Testador',
                         yaxis_title='Total de Testes',
-                        showlegend=False
+                        showlegend=False,
+                        margin=dict(t=50, b=80, l=80, r=80),
+                        height=450
                     )
+                    fig_prod.update_xaxes(tickangle=45)
                     st.plotly_chart(fig_prod, use_container_width=True, key="comparativo_produtividade")
                 
                 with col_graf2:
@@ -1126,8 +1027,11 @@ def main():
                         title_font_color='#FFFFFF',
                         xaxis_title='Testador',
                         yaxis_title='Percentual (%)',
-                        legend_title='Métricas'
+                        legend_title='Métricas',
+                        margin=dict(t=50, b=120, l=80, r=80),
+                        height=450
                     )
+                    fig_taxas.update_xaxes(tickangle=45)
                     st.plotly_chart(fig_taxas, use_container_width=True, key="comparativo_taxas")
                 
                 st.markdown("---")
@@ -1243,13 +1147,138 @@ def main():
             if st.checkbox("Mostrar dados dos testes efetuados", key="show_data_checkbox"):
                 st.dataframe(df_com_teste, use_container_width=True)
                 st.caption(f"Total de testes efetuados exibidos: {len(df_com_teste)}")
+        
+        with tab5:
+            st.markdown("### 📋 **Tarefas Sem Teste**")
+            st.markdown("*Análise detalhada das tarefas que não passaram por testes de qualidade*")
             
             if not df_sem_teste.empty:
+                # Filtros para tarefas sem teste
+                st.markdown("#### 🔍 **Filtros**")
+                
+                col_filter1, col_filter2, col_filter3 = st.columns(3)
+                
+                with col_filter1:
+                    # Filtro por Sprint
+                    sprints_sem_teste = ['Todos'] + sorted(df_sem_teste['Sprint'].dropna().unique().tolist()) if 'Sprint' in df_sem_teste.columns else ['Todos']
+                    sprint_selecionado = st.selectbox("Sprint:", sprints_sem_teste, key="sprint_sem_teste")
+                
+                with col_filter2:
+                    # Filtro por Time
+                    times_sem_teste = ['Todos'] + sorted(df_sem_teste['Time'].dropna().unique().tolist()) if 'Time' in df_sem_teste.columns else ['Todos']
+                    time_selecionado = st.selectbox("Time:", times_sem_teste, key="time_sem_teste")
+                
+                with col_filter3:
+                    # Filtro por Responsável
+                    responsaveis_sem_teste = ['Todos'] + sorted(df_sem_teste['Responsável'].dropna().unique().tolist()) if 'Responsável' in df_sem_teste.columns else ['Todos']
+                    responsavel_selecionado = st.selectbox("Responsável:", responsaveis_sem_teste, key="responsavel_sem_teste")
+                
+                # Aplicar filtros
+                df_sem_teste_filtrado = df_sem_teste.copy()
+                
+                if sprint_selecionado != 'Todos':
+                    df_sem_teste_filtrado = df_sem_teste_filtrado[df_sem_teste_filtrado['Sprint'] == sprint_selecionado]
+                
+                if time_selecionado != 'Todos':
+                    df_sem_teste_filtrado = df_sem_teste_filtrado[df_sem_teste_filtrado['Time'] == time_selecionado]
+                
+                if responsavel_selecionado != 'Todos':
+                    df_sem_teste_filtrado = df_sem_teste_filtrado[df_sem_teste_filtrado['Responsável'] == responsavel_selecionado]
+                
                 st.markdown("---")
-                st.markdown("#### 📊 **Tarefas Sem Teste**")
-                if st.checkbox("Mostrar tarefas sem teste", key="show_sem_teste_checkbox"):
-                    st.dataframe(df_sem_teste, use_container_width=True)
-                    st.caption(f"Total de tarefas sem teste: {len(df_sem_teste)}")
+                
+                # Métricas resumidas
+                col_metric1, col_metric2, col_metric3, col_metric4 = st.columns(4)
+                
+                with col_metric1:
+                    st.metric("Total de Tarefas", len(df_sem_teste_filtrado))
+                
+                with col_metric2:
+                    times_unicos = df_sem_teste_filtrado['Time'].nunique() if 'Time' in df_sem_teste_filtrado.columns else 0
+                    st.metric("Times Envolvidos", times_unicos)
+                
+                with col_metric3:
+                    sprints_unicos = df_sem_teste_filtrado['Sprint'].nunique() if 'Sprint' in df_sem_teste_filtrado.columns else 0
+                    st.metric("Sprints Afetados", sprints_unicos)
+                
+                with col_metric4:
+                    responsaveis_unicos = df_sem_teste_filtrado['Responsável'].nunique() if 'Responsável' in df_sem_teste_filtrado.columns else 0
+                    st.metric("Desenvolvedores", responsaveis_unicos)
+                
+                st.markdown("---")
+                
+                # Gráficos de análise
+                if not df_sem_teste_filtrado.empty:
+                    col_chart1, col_chart2 = st.columns(2)
+                    
+                    with col_chart1:
+                        # Gráfico por Time
+                        if 'Time' in df_sem_teste_filtrado.columns:
+                            time_counts = df_sem_teste_filtrado['Time'].value_counts()
+                            if not time_counts.empty:
+                                fig_time = px.bar(
+                                    x=time_counts.values,
+                                    y=time_counts.index,
+                                    orientation='h',
+                                    title='Tarefas Sem Teste por Time',
+                                    labels={'x': 'Quantidade', 'y': 'Time'}
+                                )
+                                fig_time.update_traces(marker_color='#FF6B6B', text=time_counts.values, textposition='outside')
+                                fig_time.update_layout(
+                                    margin=dict(t=50, b=80, l=150, r=80),
+                                    height=400
+                                )
+                                st.plotly_chart(fig_time, use_container_width=True)
+                    
+                    with col_chart2:
+                        # Gráfico por Sprint
+                        if 'Sprint' in df_sem_teste_filtrado.columns:
+                            sprint_counts = df_sem_teste_filtrado['Sprint'].value_counts().sort_index()
+                            if not sprint_counts.empty:
+                                fig_sprint = px.bar(
+                                    x=sprint_counts.index,
+                                    y=sprint_counts.values,
+                                    title='Tarefas Sem Teste por Sprint',
+                                    labels={'x': 'Sprint', 'y': 'Quantidade'}
+                                )
+                                fig_sprint.update_traces(marker_color='#FFA726', text=sprint_counts.values, textposition='outside')
+                                fig_sprint.update_layout(
+                                    margin=dict(t=50, b=80, l=80, r=80),
+                                    height=400
+                                )
+                                st.plotly_chart(fig_sprint, use_container_width=True)
+                
+                st.markdown("---")
+                
+                # Tabela de dados filtrados
+                st.markdown("#### 📊 **Dados Detalhados**")
+                if st.checkbox("Mostrar tabela de tarefas sem teste", key="show_sem_teste_table"):
+                    st.dataframe(df_sem_teste_filtrado, use_container_width=True)
+                    st.caption(f"Exibindo {len(df_sem_teste_filtrado)} de {len(df_sem_teste)} tarefas sem teste")
+                    
+                    # Opção de download
+                    if not df_sem_teste_filtrado.empty:
+                        csv = df_sem_teste_filtrado.to_csv(index=False)
+                        st.download_button(
+                            label="📥 Baixar dados filtrados (CSV)",
+                            data=csv,
+                            file_name=f"tarefas_sem_teste_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv"
+                        )
+            else:
+                st.info("📋 Nenhuma tarefa sem teste encontrada nos dados carregados.")
+                st.markdown("""
+                ### ℹ️ **Sobre esta seção:**
+                
+                Esta aba mostra tarefas que foram marcadas com motivo "SEM TESTE", permitindo:
+                
+                - **Filtros avançados** por Sprint, Time e Responsável
+                - **Métricas resumidas** do impacto
+                - **Visualizações gráficas** para análise
+                - **Exportação de dados** filtrados
+                
+                Isso ajuda a identificar padrões e tomar ações para melhorar a cobertura de testes.
+                """)
     else:
         st.info("👆 Faça upload de um arquivo Excel para começar a análise")
         st.markdown("""
@@ -1267,13 +1296,12 @@ def main():
         - **Responsavel pelo teste**: Testador responsável
         - **ID**: Identificador único da task
         
-        ### 📊 Funcionalidades do Dashboard:
-        - **KPIs Executivos**: Métricas estratégicas para apresentação à diretoria
-        - **Análise Operacional**: Visão técnica detalhada para gestores
-        - **Performance da Equipe**: Métricas individuais dos testadores
-        - **Dados Detalhados**: Visualização completa dos dados
-        - **Filtros Avançados**: Por sprint, status, time e período
-        - **Visualizações Interativas**: Gráficos com informações detalhadas
+        ### 🚀 Funcionalidades do Dashboard:
+        - Análise de performance por sprint
+        - Métricas de qualidade e rejeições
+        - Visualizações interativas
+        - Filtros avançados por período e responsável
+        - Exportação de dados
         """)
 
 if __name__ == "__main__":
