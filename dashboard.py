@@ -405,6 +405,42 @@ def grafico_heatmap_atividade(df_filtrado):
                 return fig
     return None
 
+def grafico_motivos_recusa_por_dev(df_filtrado):
+    """Gráfico mostrando total de rejeições por desenvolvedor"""
+    if 'Status' in df_filtrado.columns and 'Responsável' in df_filtrado.columns:
+        df_rejeitadas = df_filtrado[df_filtrado['Status'] == 'REJEITADA']
+        
+        if not df_rejeitadas.empty:
+            # Contar total de rejeições por desenvolvedor
+            rejeicoes_por_dev = df_rejeitadas['Responsável'].value_counts()
+            
+            # Filtrar apenas desenvolvedores com pelo menos 2 rejeições
+            devs_relevantes = rejeicoes_por_dev[rejeicoes_por_dev >= 2]
+            
+            if not devs_relevantes.empty:
+                # Pegar top 10 desenvolvedores com mais rejeições
+                top_devs = devs_relevantes.head(10)
+                
+                fig = px.bar(
+                    x=top_devs.index,
+                    y=top_devs.values,
+                    title="👨‍💻 Total de Rejeições por Desenvolvedor (min. 2 rejeições)",
+                    labels={'x': 'Desenvolvedor', 'y': 'Total de Rejeições'},
+                    text=top_devs.values,
+                    color=top_devs.values,
+                    color_continuous_scale=['#4ECDC4', '#45B7D1', '#FF6B6B']
+                )
+                
+                fig.update_layout(
+                    margin=dict(t=50, b=150, l=80, r=80),
+                    height=550,
+                    xaxis_tickangle=45,
+                    showlegend=False
+                )
+                fig.update_traces(textposition='outside', textfont_size=12)
+                return fig
+    return None
+
 def grafico_taxa_rejeicao_por_time(df_filtrado):
     """Gráfico da taxa de rejeição por time"""
     if 'Time' in df_filtrado.columns and 'Status' in df_filtrado.columns:
@@ -887,6 +923,16 @@ def main():
                             height=450
                         )
                         st.plotly_chart(fig_aprovacao, use_container_width=True, key="taxa_aprovacao_barras")
+            
+            st.markdown("---")
+            st.markdown("#### 👨‍💻 **Análise por Desenvolvedor**")
+            
+            # Novo gráfico: Motivos de recusa por desenvolvedor
+            fig_motivos_dev = grafico_motivos_recusa_por_dev(df_com_teste)
+            if fig_motivos_dev:
+                st.plotly_chart(fig_motivos_dev, use_container_width=True, key="motivos_recusa_por_dev")
+            else:
+                st.info("📋 Dados insuficientes para análise de motivos por desenvolvedor (mínimo 2 rejeições por dev)")
             
             st.markdown("---")
             st.markdown("#### 📈 **Evolução de Taxa ao Longo do Tempo**")
