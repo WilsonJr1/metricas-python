@@ -1,15 +1,63 @@
 
-# Dashboard de Métricas Q.A DelTech
+# Dashboard de Métricas DelTech - QA & Sustentação
 
-Dashboard interativo para análise de métricas de qualidade e performance da equipe de Q.A.
+Dashboard interativo para análise de métricas de qualidade e performance da equipe de Q.A e sustentação.
 
 ## Funcionalidades
 
-- **Visão Geral Estratégica**: KPIs executivos e métricas principais
-- **Prevenção e Qualidade**: Análise de rejeições e problemas detectados
-- **Visão por Sprint**: Performance por sprint e evolução temporal
-- **Visão por Testador**: Métricas individuais da equipe
-- **Tarefas Sem Teste**: Análise de tarefas que não passaram por testes
+### 🔍 Módulo de Qualidade (QA)
+
+#### 🎯 Visão Geral Estratégica
+- Evolução da qualidade ao longo do tempo
+- Distribuição de status das tasks
+- Análise de erros por time
+- Taxa de rejeição por time
+
+#### 🛡️ Prevenção e Qualidade
+- Bugs identificados por time
+- Distribuição de bugs por time
+- Tipos de falha mais comuns
+- Motivos de rejeição
+- Taxa de aprovação vs rejeição
+- Análise por desenvolvedor
+- Evolução da taxa de qualidade
+
+#### 📊 Visão por Sprint
+- Timeline de tasks testadas
+- Cobertura de QA por time
+
+#### 👤 Visão por Testador
+- Estatísticas individuais de performance
+- Comparativo entre testadores
+- Ranking de performance
+
+#### 📋 Tarefas Sem Teste
+- Análise de tasks não testadas
+- Filtros por sprint, time e responsável
+- Métricas de impacto na cobertura
+
+### 🔧 Módulo de Sustentação
+
+#### 📈 Análise de Velocidade
+- Velocidade planejada vs real por sprint
+- Desvio da velocidade
+- Tendências de performance do time
+
+#### 👥 Análise por Desenvolvedor
+- Horas trabalhadas por desenvolvedor
+- Distribuição de tarefas por tipo e status
+- Estatísticas individuais de produtividade
+
+#### ⏱️ Gestão de Tempo
+- Análise de desvios entre horas estimadas e trabalhadas
+- Timeline de tarefas por desenvolvedor
+- Identificação de maiores desvios e economias
+
+#### 📊 Métricas Executivas
+- Velocidade média do time
+- Total de horas trabalhadas
+- Desvio médio de estimativas
+- Desenvolvedores ativos
 
 ## 🛠️ Tecnologias
 

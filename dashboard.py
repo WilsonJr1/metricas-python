@@ -6,9 +6,16 @@ from plotly.subplots import make_subplots
 import numpy as np
 from datetime import datetime
 
+# Importar módulo de sustentação
+try:
+    from sustentacao import main_sustentacao
+except ImportError:
+    st.error("Módulo de sustentação não encontrado. Certifique-se de que o arquivo sustentacao.py está no mesmo diretório.")
+    main_sustentacao = None
+
 st.set_page_config(
-    page_title="Dashboard Q.A DelTech",
-    page_icon="🔍",
+    page_title="Dashboard DelTech - QA & Sustentação",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -679,14 +686,24 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
 
 
 def main():
-    st.set_page_config(
-        page_title="Dashboard de Tasks",
-        page_icon="📊",
-        layout="wide"
+    # Navegação entre módulos
+    st.sidebar.title("Navegação")
+    modulo_selecionado = st.sidebar.radio(
+        "Selecione o módulo:",
+        ["🔍 Qualidade (QA)", "🔧 Sustentação"],
+        help="Escolha entre o módulo de análise de QA ou o módulo de sustentação"
     )
     
+    if modulo_selecionado == "🔧 Sustentação":
+        if main_sustentacao:
+            main_sustentacao()
+        else:
+            st.error("❌ Módulo de sustentação não disponível")
+        return
+    
+    # Módulo de QA (código original)
     # Título principal
-    st.title("📊 Painel de Métricas de Qualidade")
+    st.title("🔍 Dashboard de Métricas Q.A DelTech")
     
     # Subtítulo será atualizado após aplicar filtros
     placeholder_subtitulo = st.empty()
