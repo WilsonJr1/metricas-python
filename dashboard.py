@@ -1551,8 +1551,77 @@ def main():
             df_bugs = carregar_dados_bugs()
             
             if df_bugs is not None and not df_bugs.empty:
-                # Processar métricas de bugs
-                metricas_bugs = processar_metricas_bugs(df_bugs)
+                # Filtros para análise de bugs
+                st.markdown("#### 🔍 **Filtros de Bugs**")
+                
+                col_bug_f1, col_bug_f2, col_bug_f3, col_bug_f4, col_bug_f5 = st.columns(5)
+                
+                with col_bug_f1:
+                    times_bugs_disponiveis = ['Todos'] + sorted(df_bugs['Time'].dropna().unique().tolist()) if 'Time' in df_bugs.columns else ['Todos']
+                    time_bug_selecionado = st.selectbox("Filtrar por Time:", times_bugs_disponiveis, key="filter_time_bugs")
+                
+                with col_bug_f2:
+                    status_bugs_disponiveis = ['Todos'] + sorted(df_bugs['Status'].dropna().unique().tolist()) if 'Status' in df_bugs.columns else ['Todos']
+                    status_bug_selecionado = st.selectbox("Filtrar por Status:", status_bugs_disponiveis, key="filter_status_bugs")
+                
+                with col_bug_f3:
+                    prioridade_bugs_disponiveis = ['Todos'] + sorted(df_bugs['Prioridade'].dropna().unique().tolist()) if 'Prioridade' in df_bugs.columns else ['Todos']
+                    prioridade_bug_selecionada = st.selectbox("Filtrar por Prioridade:", prioridade_bugs_disponiveis, key="filter_prioridade_bugs")
+                
+                with col_bug_f4:
+                    fonte_bugs_disponiveis = ['Todos'] + sorted(df_bugs['Encontrado por:'].dropna().unique().tolist()) if 'Encontrado por:' in df_bugs.columns else ['Todos']
+                    fonte_bug_selecionada = st.selectbox("Filtrar por Fonte:", fonte_bugs_disponiveis, key="filter_fonte_bugs")
+                
+                with col_bug_f5:
+                    if 'Data' in df_bugs.columns and not df_bugs['Data'].dropna().empty:
+                        data_bug_min = df_bugs['Data'].min().date()
+                        data_bug_max = df_bugs['Data'].max().date()
+                        data_bug_range = st.date_input(
+                            "Período:",
+                            value=(data_bug_min, data_bug_max),
+                            min_value=data_bug_min,
+                            max_value=data_bug_max,
+                            key="filter_data_bugs"
+                        )
+                    else:
+                        data_bug_range = None
+                
+                # Aplicar filtros aos dados de bugs
+                df_bugs_filtrado = df_bugs.copy()
+                
+                if time_bug_selecionado != 'Todos':
+                    df_bugs_filtrado = df_bugs_filtrado[df_bugs_filtrado['Time'] == time_bug_selecionado]
+                
+                if status_bug_selecionado != 'Todos':
+                    df_bugs_filtrado = df_bugs_filtrado[df_bugs_filtrado['Status'] == status_bug_selecionado]
+                
+                if prioridade_bug_selecionada != 'Todos':
+                    df_bugs_filtrado = df_bugs_filtrado[df_bugs_filtrado['Prioridade'] == prioridade_bug_selecionada]
+                
+                if fonte_bug_selecionada != 'Todos':
+                    df_bugs_filtrado = df_bugs_filtrado[df_bugs_filtrado['Encontrado por:'] == fonte_bug_selecionada]
+                
+                if data_bug_range and len(data_bug_range) == 2 and 'Data' in df_bugs.columns:
+                    df_bugs_filtrado = df_bugs_filtrado[
+                        (df_bugs_filtrado['Data'].dt.date >= data_bug_range[0]) & 
+                        (df_bugs_filtrado['Data'].dt.date <= data_bug_range[1])
+                    ]
+                
+                # Verificar se há filtros ativos para bugs
+                filtros_bugs_ativos = (
+                    time_bug_selecionado != 'Todos' or 
+                    status_bug_selecionado != 'Todos' or 
+                    prioridade_bug_selecionada != 'Todos' or 
+                    fonte_bug_selecionada != 'Todos' or 
+                    (data_bug_range and len(data_bug_range) == 2)
+                )
+                
+                if filtros_bugs_ativos:
+                    st.info(f"Mostrando {len(df_bugs_filtrado)} bugs de {len(df_bugs)} registros totais.")
+                
+                st.markdown("---")
+                # Processar métricas de bugs (usando dados filtrados)
+                metricas_bugs = processar_metricas_bugs(df_bugs_filtrado)
                 
                 # Métricas principais de bugs
                 st.markdown("#### 📊 **Métricas Executivas de Bugs**")
@@ -1573,36 +1642,36 @@ def main():
                 
                 st.markdown("---")
                 
-                # Gráficos de análise de bugs
+                # Gráficos de análise de bugs (usando dados filtrados)
                 st.markdown("#### 📈 **Análise Visual de Bugs**")
                 
                 col_graf1, col_graf2 = st.columns(2)
                 
                 with col_graf1:
                     # Status dos bugs
-                    fig_status_bugs = grafico_bugs_por_status(df_bugs)
+                    fig_status_bugs = grafico_bugs_por_status(df_bugs_filtrado)
                     if fig_status_bugs:
                         st.plotly_chart(fig_status_bugs, use_container_width=True, key="bugs_status")
                     
                     # Bugs por time
-                    fig_bugs_time = grafico_bugs_por_time(df_bugs)
+                    fig_bugs_time = grafico_bugs_por_time(df_bugs_filtrado)
                     if fig_bugs_time:
                         st.plotly_chart(fig_bugs_time, use_container_width=True, key="bugs_time")
                 
                 with col_graf2:
                     # Prioridade dos bugs
-                    fig_prioridade_bugs = grafico_bugs_por_prioridade(df_bugs)
+                    fig_prioridade_bugs = grafico_bugs_por_prioridade(df_bugs_filtrado)
                     if fig_prioridade_bugs:
                         st.plotly_chart(fig_prioridade_bugs, use_container_width=True, key="bugs_prioridade")
                     
                     # Fonte de detecção
-                    fig_fonte_bugs = grafico_bugs_fonte_deteccao(df_bugs)
+                    fig_fonte_bugs = grafico_bugs_fonte_deteccao(df_bugs_filtrado)
                     if fig_fonte_bugs:
                         st.plotly_chart(fig_fonte_bugs, use_container_width=True, key="bugs_fonte")
                 
                 # Evolução temporal dos bugs
                 st.markdown("#### 📅 **Evolução Temporal**")
-                fig_evolucao_bugs = grafico_evolucao_bugs(df_bugs)
+                fig_evolucao_bugs = grafico_evolucao_bugs(df_bugs_filtrado)
                 if fig_evolucao_bugs:
                     st.plotly_chart(fig_evolucao_bugs, use_container_width=True, key="bugs_evolucao")
                 
@@ -1659,18 +1728,18 @@ def main():
                 
                 st.markdown("---")
                 
-                # Tabela detalhada de bugs
+                # Tabela detalhada de bugs (usando dados filtrados)
                 st.markdown("#### 📋 **Dados Detalhados de Bugs**")
                 if st.checkbox("Mostrar tabela completa de bugs", key="show_bugs_table"):
-                    st.dataframe(df_bugs, use_container_width=True)
-                    st.caption(f"Total de bugs registrados: {len(df_bugs)}")
+                    st.dataframe(df_bugs_filtrado, use_container_width=True)
+                    st.caption(f"Total de bugs registrados: {len(df_bugs_filtrado)}")
                     
-                    # Download dos dados de bugs
-                    csv_bugs = df_bugs.to_csv(index=False)
+                    # Download dos dados de bugs filtrados
+                    csv_bugs = df_bugs_filtrado.to_csv(index=False)
                     st.download_button(
-                        label="📥 Baixar dados de bugs (CSV)",
+                        label="📥 Baixar dados de bugs filtrados (CSV)",
                         data=csv_bugs,
-                        file_name=f"bugs_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        file_name=f"bugs_analysis_filtered_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                         mime="text/csv"
                     )
                 
