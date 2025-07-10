@@ -172,6 +172,11 @@ adicionar_sprint.py
 analisar_planilha.py
 executar_dashboard.py
 executar_dashboard.bat
+gerar_dados_exemplo.py
+
+# Arquivos de dados temporários
+analise_bugs.json
+dados_exemplo.xlsx
 
 # Arquivos temporários
 *.tmp
