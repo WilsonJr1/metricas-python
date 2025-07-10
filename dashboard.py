@@ -109,20 +109,26 @@ def contar_total_bugs(df_rejeitadas):
 # ===== FUNÇÕES PARA ANÁLISE DE BUGS =====
 
 def carregar_dados_bugs():
-    """Carrega dados de bugs da planilha bugs.xlsx"""
-    try:
-        bugs_path = Path("bugs.xlsx")
-        if bugs_path.exists():
-            df_bugs = pd.read_excel(bugs_path)
+    """Carrega dados de bugs via upload de arquivo"""
+    uploaded_file_bugs = st.file_uploader(
+        "Faça upload da planilha de bugs",
+        type=['xlsx', 'xls'],
+        key="bugs_uploader",
+        help="Selecione a planilha contendo os dados de bugs para análise"
+    )
+    
+    if uploaded_file_bugs is not None:
+        try:
+            df_bugs = pd.read_excel(uploaded_file_bugs)
             # Processar dados de bugs
             if 'Data' in df_bugs.columns:
                 df_bugs['Data'] = pd.to_datetime(df_bugs['Data'], errors='coerce')
+            st.success(f"✅ Planilha de bugs carregada: {uploaded_file_bugs.name}")
             return df_bugs
-        else:
+        except Exception as e:
+            st.error(f"Erro ao carregar arquivo de bugs: {e}")
             return None
-    except Exception as e:
-        st.error(f"Erro ao carregar dados de bugs: {e}")
-        return None
+    return None
 
 def processar_metricas_bugs(df_bugs):
     """Processa métricas específicas de bugs"""
@@ -1692,11 +1698,11 @@ def main():
                     st.success(rec)
                     
             else:
-                st.warning("📁 Arquivo 'bugs.xlsx' não encontrado no diretório do projeto")
+                st.info("📁 Faça upload da planilha de bugs para começar a análise")
                 st.markdown("""
                 ### 📋 **Como usar a Análise de Bugs:**
                 
-                1. **Adicione o arquivo 'bugs.xlsx'** no mesmo diretório do dashboard
+                1. **Faça upload da planilha de bugs** usando o botão acima
                 2. **Estrutura esperada do arquivo:**
                    - **Data**: Data de identificação do bug
                    - **Time**: Time responsável pelo desenvolvimento
@@ -1712,7 +1718,7 @@ def main():
                    - 📅 Evolução temporal
                    - 💡 Insights automáticos
                    - 🎯 Recomendações estratégicas
-                """)
+                """
     else:
         st.info("👆 Faça upload de um arquivo Excel para começar a análise")
         st.markdown("""
