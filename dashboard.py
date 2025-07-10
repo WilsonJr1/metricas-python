@@ -1718,7 +1718,7 @@ def main():
                    - 📅 Evolução temporal
                    - 💡 Insights automáticos
                    - 🎯 Recomendações estratégicas
-                """
+                """)
     else:
         st.info("👆 Faça upload de um arquivo Excel para começar a análise")
         st.markdown("""
