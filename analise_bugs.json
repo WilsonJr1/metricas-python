@@ -1,0 +1,70 @@
+{
+  "total_registros": 13,
+  "total_colunas": 6,
+  "colunas": [
+    "Data",
+    "Time",
+    "Encontrado por:",
+    "BUG",
+    "Status",
+    "Prioridade"
+  ],
+  "tipos_dados": {
+    "Data": "datetime64[ns]",
+    "Time": "object",
+    "Encontrado por:": "object",
+    "BUG": "object",
+    "Status": "object",
+    "Prioridade": "object"
+  },
+  "valores_nulos": {
+    "Data": 0,
+    "Time": 0,
+    "Encontrado por:": 0,
+    "BUG": 0,
+    "Status": 0,
+    "Prioridade": 0
+  },
+  "amostra_dados": [
+    {
+      "Data": "2025-06-30 00:00:00",
+      "Time": "IB",
+      "Encontrado por:": "Q.A",
+      "BUG": "Tela de extrato do IB em Loop",
+      "Status": "Corrigido",
+      "Prioridade": "Alta"
+    },
+    {
+      "Data": "2025-06-27 00:00:00",
+      "Time": "IB",
+      "Encontrado por:": "Q.A",
+      "BUG": "Operador Full Acess não tem permissão para criar Operador convidado",
+      "Status": "Corrigido",
+      "Prioridade": "Media"
+    },
+    {
+      "Data": "2025-06-30 00:00:00",
+      "Time": "IB",
+      "Encontrado por:": "Cliente",
+      "BUG": "Operador convidado não consegue fazer requisição de login",
+      "Status": "Corrigido",
+      "Prioridade": "Alta"
+    },
+    {
+      "Data": "2025-06-30 00:00:00",
+      "Time": "IB",
+      "Encontrado por:": "Cliente",
+      "BUG": "Cobranças não estavam gerando requisições",
+      "Status": "Corrigido",
+      "Prioridade": "Alta"
+    },
+    {
+      "Data": "2025-06-30 00:00:00",
+      "Time": "IB",
+      "Encontrado por:": "Cliente",
+      "BUG": "Autorização de transação tipo boleto não sai da lista após aprovada",
+      "Status": "Corrigido",
+      "Prioridade": "Alta"
+    }
+  ]
+}

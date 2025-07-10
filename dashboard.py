@@ -5,6 +5,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 from datetime import datetime
+import json
+from pathlib import Path
 
 # Importar módulo de sustentação
 try:
@@ -104,6 +106,191 @@ def contar_total_bugs(df_rejeitadas):
     
     return total_bugs
 
+# ===== FUNÇÕES PARA ANÁLISE DE BUGS =====
+
+def carregar_dados_bugs():
+    """Carrega dados de bugs da planilha bugs.xlsx"""
+    try:
+        bugs_path = Path("bugs.xlsx")
+        if bugs_path.exists():
+            df_bugs = pd.read_excel(bugs_path)
+            # Processar dados de bugs
+            if 'Data' in df_bugs.columns:
+                df_bugs['Data'] = pd.to_datetime(df_bugs['Data'], errors='coerce')
+            return df_bugs
+        else:
+            return None
+    except Exception as e:
+        st.error(f"Erro ao carregar dados de bugs: {e}")
+        return None
+
+def processar_metricas_bugs(df_bugs):
+    """Processa métricas específicas de bugs"""
+    if df_bugs is None or df_bugs.empty:
+        return {}
+    
+    metricas = {
+        'total_bugs': len(df_bugs),
+        'bugs_por_status': {},
+        'bugs_por_prioridade': {},
+        'bugs_por_time': {},
+        'bugs_por_fonte': {},
+        'bugs_criticos': 0,
+        'bugs_abertos': 0,
+        'bugs_resolvidos': 0
+    }
+    
+    # Análise por status
+    if 'Status' in df_bugs.columns:
+        metricas['bugs_por_status'] = df_bugs['Status'].value_counts().to_dict()
+        metricas['bugs_abertos'] = sum([v for k, v in metricas['bugs_por_status'].items() 
+                                       if any(palavra in k.lower() for palavra in ['pendente', 'aberto', 'em correção'])])
+        metricas['bugs_resolvidos'] = sum([v for k, v in metricas['bugs_por_status'].items() 
+                                         if 'corrigido' in k.lower()])
+    
+    # Análise por prioridade
+    if 'Prioridade' in df_bugs.columns:
+        metricas['bugs_por_prioridade'] = df_bugs['Prioridade'].value_counts().to_dict()
+        metricas['bugs_criticos'] = sum([v for k, v in metricas['bugs_por_prioridade'].items() 
+                                        if 'alta' in k.lower()])
+    
+    # Análise por time
+    if 'Time' in df_bugs.columns:
+        metricas['bugs_por_time'] = df_bugs['Time'].value_counts().to_dict()
+    
+    # Análise por fonte (quem encontrou)
+    if 'Encontrado por:' in df_bugs.columns:
+        metricas['bugs_por_fonte'] = df_bugs['Encontrado por:'].value_counts().to_dict()
+    
+    return metricas
+
+def grafico_bugs_por_status(df_bugs):
+    """Gráfico de distribuição de bugs por status"""
+    if df_bugs is None or df_bugs.empty or 'Status' not in df_bugs.columns:
+        return None
+    
+    status_counts = df_bugs['Status'].value_counts()
+    
+    # Mapeamento de cores específico para cada status
+    cores_status = {
+        'Concluido': '#4CAF50',  # Verde para concluído
+        'Concluído': '#4CAF50',  # Verde para concluído
+        'Corrigido': '#4CAF50',  # Verde para corrigido
+        'Pendente': '#FFA726',   # Laranja para pendente
+        'Em correção': '#2196F3', # Azul para em correção
+        'Em correcao': '#2196F3', # Azul para em correção
+        'Aberto': '#FF5722'      # Vermelho para aberto
+    }
+    
+    # Criar lista de cores baseada nos status presentes
+    cores_ordenadas = [cores_status.get(status, '#9E9E9E') for status in status_counts.index]
+    
+    fig = px.pie(
+        values=status_counts.values,
+        names=status_counts.index,
+        title="🐛 Status dos Bugs Identificados",
+        color_discrete_sequence=cores_ordenadas
+    )
+    fig.update_traces(
+        textinfo='label+percent+value',
+        hovertemplate='Status: %{label}<br>Quantidade: %{value}<br>Percentual: %{percent}<extra></extra>'
+    )
+    return fig
+
+def grafico_bugs_por_prioridade(df_bugs):
+    """Gráfico de bugs por prioridade"""
+    if df_bugs is None or df_bugs.empty or 'Prioridade' not in df_bugs.columns:
+        return None
+    
+    prioridade_counts = df_bugs['Prioridade'].value_counts()
+    cores = {'Alta': '#FF6B6B', 'Media': '#FFA726', 'Baixa': '#4CAF50'}
+    
+    fig = px.bar(
+        x=prioridade_counts.index,
+        y=prioridade_counts.values,
+        title="⚠️ Distribuição de Bugs por Prioridade",
+        color=prioridade_counts.index,
+        color_discrete_map=cores,
+        text=prioridade_counts.values
+    )
+    fig.update_traces(
+        textposition='outside',
+        hovertemplate='Prioridade: %{x}<br>Quantidade: %{y}<extra></extra>'
+    )
+    fig.update_layout(showlegend=False)
+    return fig
+
+def grafico_bugs_por_time(df_bugs):
+    """Gráfico de bugs por time"""
+    if df_bugs is None or df_bugs.empty or 'Time' not in df_bugs.columns:
+        return None
+    
+    time_counts = df_bugs['Time'].value_counts()
+    fig = px.bar(
+        y=time_counts.index,
+        x=time_counts.values,
+        orientation='h',
+        title="🏢 Bugs Identificados por Time",
+        color=time_counts.values,
+        color_continuous_scale='Reds',
+        text=time_counts.values
+    )
+    fig.update_traces(
+        textposition='outside',
+        hovertemplate='Time: %{y}<br>Bugs: %{x}<extra></extra>'
+    )
+    fig.update_layout(
+        height=max(400, len(time_counts) * 50),
+        margin=dict(l=100)
+    )
+    return fig
+
+def grafico_bugs_fonte_deteccao(df_bugs):
+    """Gráfico de fonte de detecção de bugs"""
+    if df_bugs is None or df_bugs.empty or 'Encontrado por:' not in df_bugs.columns:
+        return None
+    
+    fonte_counts = df_bugs['Encontrado por:'].value_counts()
+    fig = px.pie(
+        values=fonte_counts.values,
+        names=fonte_counts.index,
+        title="🔍 Fonte de Detecção dos Bugs",
+        color_discrete_sequence=['#4ECDC4', '#FF6B6B', '#45B7D1']
+    )
+    fig.update_traces(
+        textinfo='label+percent+value',
+        hovertemplate='Fonte: %{label}<br>Quantidade: %{value}<br>Percentual: %{percent}<extra></extra>'
+    )
+    return fig
+
+def grafico_evolucao_bugs(df_bugs):
+    """Gráfico de evolução temporal dos bugs"""
+    if df_bugs is None or df_bugs.empty or 'Data' not in df_bugs.columns:
+        return None
+    
+    df_bugs_com_data = df_bugs.dropna(subset=['Data'])
+    if df_bugs_com_data.empty:
+        return None
+    
+    df_bugs_com_data['Mes'] = df_bugs_com_data['Data'].dt.to_period('M')
+    bugs_por_mes = df_bugs_com_data['Mes'].value_counts().sort_index()
+    
+    fig = px.line(
+        x=[str(m) for m in bugs_por_mes.index],
+        y=bugs_por_mes.values,
+        title="📈 Evolução dos Bugs ao Longo do Tempo",
+        markers=True
+    )
+    fig.update_traces(
+        line_color='#FF6B6B',
+        marker_size=8,
+        hovertemplate='Mês: %{x}<br>Bugs: %{y}<extra></extra>'
+    )
+    fig.update_layout(
+        xaxis_title="Mês",
+        yaxis_title="Quantidade de Bugs"
+    )
+    return fig
 
 
 def grafico_status_distribuicao(df_filtrado):
@@ -548,8 +735,15 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
     
     # Cálculos principais
     total_planilha = len(df_original)
-    total_testes_efetuados = len(df_filtrado[df_filtrado['Responsavel pelo teste'].notna()])
-    total_sem_teste = len(df_sem_teste) if df_sem_teste is not None else len(df_original[df_original['Motivo'].str.upper().str.contains('SEM TESTE', na=False)])
+    
+    # Verificar se a coluna 'Responsavel pelo teste' existe
+    if 'Responsavel pelo teste' in df_filtrado.columns:
+        total_testes_efetuados = len(df_filtrado[df_filtrado['Responsavel pelo teste'].notna()])
+    else:
+        # Se não existir, usar uma estimativa baseada em status diferentes de vazio
+        total_testes_efetuados = len(df_filtrado[df_filtrado['Status'].notna()]) if 'Status' in df_filtrado.columns else len(df_filtrado)
+    
+    total_sem_teste = len(df_sem_teste) if df_sem_teste is not None else len(df_original[df_original['Motivo'].str.upper().str.contains('SEM TESTE', na=False)]) if 'Motivo' in df_original.columns else 0
     
     # Métricas de bugs
     df_rejeitadas = df_filtrado[df_filtrado['Status'] == 'REJEITADA'] if 'Status' in df_filtrado.columns else pd.DataFrame()
@@ -799,7 +993,7 @@ def main():
         st.markdown("---")
         
         # Criar abas para organizar o dashboard
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📌 Visão Geral Estratégica", "🛡️ Prevenção e Qualidade", "🏁 Visão por Sprint", "🧑‍🤝‍🧑 Visão por Testador", "📋 Tarefas Sem Teste"])
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📌 Visão Geral Estratégica", "🛡️ Prevenção e Qualidade", "🏁 Visão por Sprint", "🧑‍🤝‍🧑 Visão por Testador", "📋 Tarefas Sem Teste", "🐛 Análise de Bugs"])
         
         with tab1:
             st.markdown("### 📌 **Visão Geral Estratégica**")
@@ -1341,6 +1535,183 @@ def main():
                 - **Exportação de dados** filtrados
                 
                 Isso ajuda a identificar padrões e tomar ações para melhorar a cobertura de testes.
+                """)
+        
+        with tab6:
+            st.markdown("### 🐛 **Análise Detalhada de Bugs**")
+            st.markdown("*Insights profissionais sobre defeitos identificados em produção*")
+            
+            # Carregar dados de bugs
+            df_bugs = carregar_dados_bugs()
+            
+            if df_bugs is not None and not df_bugs.empty:
+                # Processar métricas de bugs
+                metricas_bugs = processar_metricas_bugs(df_bugs)
+                
+                # Métricas principais de bugs
+                st.markdown("#### 📊 **Métricas Executivas de Bugs**")
+                
+                col_bug1, col_bug2, col_bug3, col_bug4 = st.columns(4)
+                
+                with col_bug1:
+                    st.metric("🐛 Total de Bugs", metricas_bugs.get('total_bugs', 0))
+                
+                with col_bug2:
+                    st.metric("🚨 Bugs Críticos", metricas_bugs.get('bugs_criticos', 0))
+                
+                with col_bug3:
+                    st.metric("🔓 Bugs Abertos", metricas_bugs.get('bugs_abertos', 0))
+                
+                with col_bug4:
+                    st.metric("✅ Bugs Resolvidos", metricas_bugs.get('bugs_resolvidos', 0))
+                
+                st.markdown("---")
+                
+                # Gráficos de análise de bugs
+                st.markdown("#### 📈 **Análise Visual de Bugs**")
+                
+                col_graf1, col_graf2 = st.columns(2)
+                
+                with col_graf1:
+                    # Status dos bugs
+                    fig_status_bugs = grafico_bugs_por_status(df_bugs)
+                    if fig_status_bugs:
+                        st.plotly_chart(fig_status_bugs, use_container_width=True, key="bugs_status")
+                    
+                    # Bugs por time
+                    fig_bugs_time = grafico_bugs_por_time(df_bugs)
+                    if fig_bugs_time:
+                        st.plotly_chart(fig_bugs_time, use_container_width=True, key="bugs_time")
+                
+                with col_graf2:
+                    # Prioridade dos bugs
+                    fig_prioridade_bugs = grafico_bugs_por_prioridade(df_bugs)
+                    if fig_prioridade_bugs:
+                        st.plotly_chart(fig_prioridade_bugs, use_container_width=True, key="bugs_prioridade")
+                    
+                    # Fonte de detecção
+                    fig_fonte_bugs = grafico_bugs_fonte_deteccao(df_bugs)
+                    if fig_fonte_bugs:
+                        st.plotly_chart(fig_fonte_bugs, use_container_width=True, key="bugs_fonte")
+                
+                # Evolução temporal dos bugs
+                st.markdown("#### 📅 **Evolução Temporal**")
+                fig_evolucao_bugs = grafico_evolucao_bugs(df_bugs)
+                if fig_evolucao_bugs:
+                    st.plotly_chart(fig_evolucao_bugs, use_container_width=True, key="bugs_evolucao")
+                
+                st.markdown("---")
+                
+                # Insights automáticos
+                st.markdown("#### 💡 **Insights Estratégicos**")
+                
+                insights_bugs = []
+                
+                # Insight sobre bugs críticos
+                if metricas_bugs.get('bugs_criticos', 0) > 0:
+                    total_bugs = metricas_bugs.get('total_bugs', 1)
+                    perc_criticos = (metricas_bugs['bugs_criticos'] / total_bugs) * 100
+                    if perc_criticos > 30:
+                        insights_bugs.append(f"🚨 **ATENÇÃO**: {perc_criticos:.1f}% dos bugs são de alta prioridade - requer ação imediata")
+                    else:
+                        insights_bugs.append(f"⚠️ {perc_criticos:.1f}% dos bugs são de alta prioridade")
+                
+                # Insight sobre bugs abertos
+                if metricas_bugs.get('bugs_abertos', 0) > 0:
+                    total_bugs = metricas_bugs.get('total_bugs', 1)
+                    perc_abertos = (metricas_bugs['bugs_abertos'] / total_bugs) * 100
+                    if perc_abertos > 50:
+                        insights_bugs.append(f"🔓 **CRÍTICO**: {perc_abertos:.1f}% dos bugs ainda estão pendentes de correção")
+                    else:
+                        insights_bugs.append(f"🔓 {perc_abertos:.1f}% dos bugs estão pendentes")
+                
+                # Insight sobre time com mais bugs
+                if metricas_bugs.get('bugs_por_time'):
+                    time_mais_bugs = max(metricas_bugs['bugs_por_time'], key=metricas_bugs['bugs_por_time'].get)
+                    qtd_bugs_time = metricas_bugs['bugs_por_time'][time_mais_bugs]
+                    insights_bugs.append(f"🏢 Time **{time_mais_bugs}** tem o maior número de bugs ({qtd_bugs_time})")
+                
+                # Insight sobre fonte de detecção
+                if metricas_bugs.get('bugs_por_fonte'):
+                    fonte_principal = max(metricas_bugs['bugs_por_fonte'], key=metricas_bugs['bugs_por_fonte'].get)
+                    qtd_fonte = metricas_bugs['bugs_por_fonte'][fonte_principal]
+                    total_bugs = sum(metricas_bugs['bugs_por_fonte'].values())
+                    perc_fonte = (qtd_fonte / total_bugs) * 100
+                    if fonte_principal.lower() == 'cliente':
+                        insights_bugs.append(f"🔍 **ALERTA**: {perc_fonte:.1f}% dos bugs foram encontrados por clientes - melhorar testes internos")
+                    else:
+                        insights_bugs.append(f"🔍 {perc_fonte:.1f}% dos bugs foram detectados por {fonte_principal}")
+                
+                # Exibir insights
+                for insight in insights_bugs:
+                    if "CRÍTICO" in insight or "ATENÇÃO" in insight or "ALERTA" in insight:
+                        st.error(insight)
+                    elif "⚠️" in insight:
+                        st.warning(insight)
+                    else:
+                        st.info(insight)
+                
+                st.markdown("---")
+                
+                # Tabela detalhada de bugs
+                st.markdown("#### 📋 **Dados Detalhados de Bugs**")
+                if st.checkbox("Mostrar tabela completa de bugs", key="show_bugs_table"):
+                    st.dataframe(df_bugs, use_container_width=True)
+                    st.caption(f"Total de bugs registrados: {len(df_bugs)}")
+                    
+                    # Download dos dados de bugs
+                    csv_bugs = df_bugs.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Baixar dados de bugs (CSV)",
+                        data=csv_bugs,
+                        file_name=f"bugs_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv"
+                    )
+                
+                # Recomendações estratégicas
+                st.markdown("#### 🎯 **Recomendações Estratégicas**")
+                
+                recomendacoes = []
+                
+                if metricas_bugs.get('bugs_criticos', 0) > 3:
+                    recomendacoes.append("🚨 **Priorizar correção de bugs críticos** - Alocar recursos dedicados")
+                
+                if metricas_bugs.get('bugs_abertos', 0) > metricas_bugs.get('bugs_resolvidos', 0):
+                    recomendacoes.append("⚡ **Acelerar processo de correção** - Bugs abertos excedem resolvidos")
+                
+                if metricas_bugs.get('bugs_por_fonte', {}).get('Cliente', 0) > 0:
+                    recomendacoes.append("🔍 **Fortalecer testes internos** - Evitar bugs chegarem ao cliente")
+                
+                if len(metricas_bugs.get('bugs_por_time', {})) > 3:
+                    recomendacoes.append("📚 **Implementar treinamento de qualidade** - Múltiplos times afetados")
+                
+                if not recomendacoes:
+                    recomendacoes.append("✅ **Manter padrão atual** - Métricas de bugs estão controladas")
+                
+                for rec in recomendacoes:
+                    st.success(rec)
+                    
+            else:
+                st.warning("📁 Arquivo 'bugs.xlsx' não encontrado no diretório do projeto")
+                st.markdown("""
+                ### 📋 **Como usar a Análise de Bugs:**
+                
+                1. **Adicione o arquivo 'bugs.xlsx'** no mesmo diretório do dashboard
+                2. **Estrutura esperada do arquivo:**
+                   - **Data**: Data de identificação do bug
+                   - **Time**: Time responsável pelo desenvolvimento
+                   - **Encontrado por**: Quem identificou o bug (Q.A, Cliente, etc.)
+                   - **BUG**: Descrição do bug
+                   - **Status**: Status atual (Corrigido, Pendente, Em correção)
+                   - **Prioridade**: Prioridade do bug (Alta, Media, Baixa)
+                
+                3. **Funcionalidades disponíveis:**
+                   - 📊 Métricas executivas de bugs
+                   - 📈 Análise visual por status, prioridade e time
+                   - 🔍 Fonte de detecção dos bugs
+                   - 📅 Evolução temporal
+                   - 💡 Insights automáticos
+                   - 🎯 Recomendações estratégicas
                 """)
     else:
         st.info("👆 Faça upload de um arquivo Excel para começar a análise")
