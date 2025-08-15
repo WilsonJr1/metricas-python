@@ -7,6 +7,7 @@ import numpy as np
 from datetime import datetime
 import json
 from pathlib import Path
+import os
 
 # Importar módulo de sustentação
 try:
@@ -43,7 +44,7 @@ def processar_dados(df):
     
     colunas_esperadas = ['Data', 'Sprint', 'Time', 'Nome da Task', 'Link da Task', 
                         'Status', 'Responsável', 'Motivo', 'Motivo2', 'Motivo3', 
-                        'Responsavel pelo teste', 'ID']
+                        'Responsavel pelo teste', 'ID', 'Erros']
     
     colunas_faltantes = [col for col in colunas_esperadas if col not in df.columns]
     if colunas_faltantes:
@@ -105,6 +106,94 @@ def contar_total_bugs(df_rejeitadas):
                     total_bugs += 1
     
     return total_bugs
+
+def contar_erros_por_time(df_filtrado):
+    """Conta erros por time usando a coluna 'Erros'"""
+    if df_filtrado.empty or 'Erros' not in df_filtrado.columns or 'Time' not in df_filtrado.columns:
+        return pd.Series(dtype=int)
+    
+    df_com_erros = df_filtrado[df_filtrado['Erros'].notna() & (df_filtrado['Erros'] > 0)]
+    if df_com_erros.empty:
+        return pd.Series(dtype=int)
+    
+    erros_por_time = df_com_erros.groupby('Time')['Erros'].sum().sort_values(ascending=False)
+    return erros_por_time
+
+def contar_total_erros(df_filtrado):
+    """Conta o total de erros usando a coluna 'Erros'"""
+    if df_filtrado.empty or 'Erros' not in df_filtrado.columns:
+        return 0
+    
+    total_erros = df_filtrado['Erros'].fillna(0).sum()
+    return int(total_erros)
+
+def calcular_media_erros_por_teste(df_filtrado):
+    """Calcula a média de erros por teste"""
+    if df_filtrado.empty or 'Erros' not in df_filtrado.columns:
+        return 0
+    
+    total_testes = len(df_filtrado)
+    total_erros = contar_total_erros(df_filtrado)
+    
+    if total_testes == 0:
+        return 0
+    
+    return round(total_erros / total_testes, 2)
+
+def contar_erros_por_testador(df_filtrado):
+    """Conta erros por testador usando a coluna 'Erros'"""
+    if (df_filtrado.empty or 'Erros' not in df_filtrado.columns or 
+        'Responsavel pelo teste' not in df_filtrado.columns):
+        return pd.Series(dtype=int)
+    
+    df_com_erros = df_filtrado[df_filtrado['Erros'].notna() & (df_filtrado['Erros'] > 0)]
+    if df_com_erros.empty:
+        return pd.Series(dtype=int)
+    
+    erros_por_testador = df_com_erros.groupby('Responsavel pelo teste')['Erros'].sum().sort_values(ascending=False)
+    return erros_por_testador
+
+def analisar_distribuicao_erros(df_filtrado):
+    """Analisa a distribuição de erros considerando o total real de testes"""
+    if df_filtrado.empty or 'Erros' not in df_filtrado.columns:
+        return {}
+    
+    # Total real de testes (todos os registros)
+    total_testes_real = len(df_filtrado)
+    
+    # Testes que têm dados na coluna Erros
+    df_com_dados_erros = df_filtrado[df_filtrado['Erros'].notna()]
+    
+    # Se não há dados de erro, retornar estrutura com total real
+    if df_com_dados_erros.empty:
+        return {
+            'testes_sem_erro': 0,
+            'testes_com_erro': 0,
+            'testes_sem_dados': total_testes_real,
+            'total_testes': total_testes_real,
+            'total_com_dados': 0,
+            'max_erros_teste': 0,
+            'min_erros_teste': 0,
+            'mediana_erros': 0
+        }
+    
+    # Calcular testes com/sem erro apenas dos que têm dados
+    testes_sem_erro = len(df_com_dados_erros[df_com_dados_erros['Erros'] == 0])
+    testes_com_erro = len(df_com_dados_erros[df_com_dados_erros['Erros'] > 0])
+    testes_sem_dados = total_testes_real - len(df_com_dados_erros)
+    
+    analise = {
+        'testes_sem_erro': testes_sem_erro,
+        'testes_com_erro': testes_com_erro,
+        'testes_sem_dados': testes_sem_dados,
+        'total_testes': total_testes_real,
+        'total_com_dados': len(df_com_dados_erros),
+        'max_erros_teste': df_com_dados_erros['Erros'].max() if not df_com_dados_erros.empty else 0,
+        'min_erros_teste': df_com_dados_erros['Erros'].min() if not df_com_dados_erros.empty else 0,
+        'mediana_erros': df_com_dados_erros['Erros'].median() if not df_com_dados_erros.empty else 0
+    }
+    
+    return analise
 
 # ===== FUNÇÕES PARA ANÁLISE DE BUGS =====
 
@@ -527,6 +616,133 @@ def grafico_erros_por_time(df_filtrado):
             return fig
     return None
 
+def grafico_erros_coluna_por_time(df_filtrado):
+    """Gráfico mostrando quantidade de erros por time usando a coluna 'Erros'"""
+    if 'Erros' not in df_filtrado.columns or 'Time' not in df_filtrado.columns:
+        return None
+    
+    erros_por_time = contar_erros_por_time(df_filtrado)
+    if erros_por_time.empty:
+        return None
+    
+    fig = px.bar(
+        x=erros_por_time.index,
+        y=erros_por_time.values,
+        title="📊 Total de Erros por Time",
+        labels={'x': 'Time', 'y': 'Total de Erros'},
+        color=erros_por_time.values,
+        color_continuous_scale=['#4ECDC4', '#45B7D1', '#FF6B6B'],
+        text=erros_por_time.values
+    )
+    
+    fig.update_layout(
+        margin=dict(t=50, b=150, l=80, r=80),
+        height=450,
+        xaxis_tickangle=45,
+        showlegend=False
+    )
+    fig.update_traces(
+        textposition='outside', 
+        textfont_size=12,
+        hovertemplate='Time: %{x}<br>Erros: %{y}<extra></extra>'
+    )
+    return fig
+
+def grafico_erros_por_testador(df_filtrado):
+    """Gráfico mostrando quantidade de erros por testador"""
+    if ('Erros' not in df_filtrado.columns or 
+        'Responsavel pelo teste' not in df_filtrado.columns):
+        return None
+    
+    erros_por_testador = contar_erros_por_testador(df_filtrado)
+    if erros_por_testador.empty:
+        return None
+    
+    fig = px.bar(
+        x=erros_por_testador.values,
+        y=erros_por_testador.index,
+        orientation='h',
+        title="👥 Total de Erros Encontrados por Testador",
+        labels={'x': 'Total de Erros', 'y': 'Testador'},
+        color=erros_por_testador.values,
+        color_continuous_scale='Reds',
+        text=erros_por_testador.values
+    )
+    
+    fig.update_layout(
+        height=max(400, len(erros_por_testador) * 60),
+        margin=dict(l=150, r=50, t=50, b=50),
+        showlegend=False
+    )
+    fig.update_traces(
+        textposition='outside',
+        hovertemplate='Testador: %{y}<br>Erros: %{x}<extra></extra>'
+    )
+    return fig
+
+def grafico_distribuicao_erros(df_filtrado):
+    """Gráfico de distribuição de erros (testes com/sem erro e sem dados)"""
+    if 'Erros' not in df_filtrado.columns:
+        return None
+    
+    analise = analisar_distribuicao_erros(df_filtrado)
+    if not analise:
+        return None
+    
+    labels = ['Testes sem Erro', 'Testes com Erro', 'Testes sem Dados']
+    values = [analise['testes_sem_erro'], analise['testes_com_erro'], analise['testes_sem_dados']]
+    
+    if sum(values) == 0:
+        return None
+    
+    fig = px.pie(
+        values=values,
+        names=labels,
+        title="🎯 Distribuição Completa de Testes",
+        color_discrete_sequence=['#4CAF50', '#FF6B6B', '#FFA726']
+    )
+    
+    fig.update_traces(
+        textinfo='label+percent+value',
+        hovertemplate='%{label}<br>Quantidade: %{value}<br>Percentual: %{percent}<extra></extra>'
+    )
+    return fig
+
+def grafico_media_erros_por_time(df_filtrado):
+    """Gráfico da média de erros por time"""
+    if ('Erros' not in df_filtrado.columns or 'Time' not in df_filtrado.columns):
+        return None
+    
+    df_com_erros = df_filtrado[df_filtrado['Erros'].notna()]
+    if df_com_erros.empty:
+        return None
+    
+    media_erros_time = df_com_erros.groupby('Time')['Erros'].mean().sort_values(ascending=False)
+    if media_erros_time.empty:
+        return None
+    
+    fig = px.bar(
+        x=media_erros_time.index,
+        y=media_erros_time.values,
+        title="📈 Média de Erros por Teste por Time",
+        labels={'x': 'Time', 'y': 'Média de Erros por Teste'},
+        color=media_erros_time.values,
+        color_continuous_scale='Oranges',
+        text=[f"{val:.1f}" for val in media_erros_time.values]
+    )
+    
+    fig.update_layout(
+        margin=dict(t=50, b=150, l=80, r=80),
+        height=450,
+        xaxis_tickangle=45,
+        showlegend=False
+    )
+    fig.update_traces(
+        textposition='outside',
+        hovertemplate='Time: %{x}<br>Média: %{y:.2f}<extra></extra>'
+    )
+    return fig
+
 def grafico_distribuicao_bugs_tipo(df_filtrado):
     """Gráfico de distribuição dos tipos de bugs mais comuns"""
     if 'Status' in df_filtrado.columns:
@@ -825,9 +1041,43 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
             help="Percentual de testes que passaram na primeira validação"
         )
     
-    # Removido: Valor Economizado
+    # === SEÇÃO 3: ANÁLISE DE ERROS ===
+    if 'Erros' in df_filtrado.columns:
+        st.markdown("##### 🐛 **Análise de Erros Encontrados**")
+        col_e1, col_e2, col_e3 = st.columns(3)
+        
+        with col_e1:
+            total_erros = contar_total_erros(df_filtrado)
+            st.metric(
+                "🔢 Total de Erros", 
+                f"{total_erros:,}",
+                delta="erros identificados",
+                help="Número total de erros encontrados em todos os testes"
+            )
+        
+        with col_e2:
+            media_erros = calcular_media_erros_por_teste(df_filtrado)
+            st.metric(
+                "📊 Média de Erros/Teste", 
+                f"{media_erros:.1f}",
+                delta="erros por teste",
+                help="Média de erros encontrados por teste realizado"
+            )
+        
+        with col_e3:
+            distribuicao_erros = analisar_distribuicao_erros(df_filtrado)
+            if distribuicao_erros:
+                testes_com_erro = distribuicao_erros['testes_com_erro']
+                total_testes_real = distribuicao_erros['total_testes']
+                taxa_testes_com_erro = (testes_com_erro / total_testes_real * 100) if total_testes_real > 0 else 0
+                st.metric(
+                    "⚠️ Taxa de Testes c/ Erro", 
+                    f"{taxa_testes_com_erro:.1f}%",
+                    delta=f"{testes_com_erro} de {total_testes_real} testes",
+                    help="Percentual de testes que encontraram pelo menos um erro"
+                )
     
-    # === SEÇÃO 3: ANÁLISE DE RISCOS E PONTOS CRÍTICOS ===
+    # === SEÇÃO 4: ANÁLISE DE RISCOS E PONTOS CRÍTICOS ===
     st.markdown("##### ⚠️ **Análise de Riscos e Pontos de Atenção**")
     col9, col10, col11 = st.columns(3)
     
@@ -999,7 +1249,7 @@ def main():
         st.markdown("---")
         
         # Criar abas para organizar o dashboard
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📌 Visão Geral Estratégica", "🛡️ Prevenção e Qualidade", "🏁 Visão por Sprint", "🧑‍🤝‍🧑 Visão por Testador", "📋 Tarefas Sem Teste", "🐛 Análise de Bugs"])
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📌 Visão Geral Estratégica", "🛡️ Prevenção e Qualidade", "🏁 Visão por Sprint", "🧑‍🤝‍🧑 Visão por Testador", "📋 Tarefas Sem Teste", "🔢 Análise de Erros", "🐛 Análise de Bugs"])
         
         with tab1:
             st.markdown("### 📌 **Visão Geral Estratégica**")
@@ -1544,6 +1794,161 @@ def main():
                 """)
         
         with tab6:
+            st.markdown("### 🔢 **Análise de Erros Encontrados**")
+            st.markdown("*Análise detalhada dos erros identificados durante os testes*")
+            
+            # Informação sobre o escopo da análise
+            st.info("ℹ️ **Importante**: A taxa de testes com erro é calculada sobre o total de testes realizados. O gráfico de distribuição mostra três categorias: testes com erro, testes sem erro e testes sem dados de erro preenchidos.")
+            
+            if 'Erros' in df_com_teste.columns:
+                # Verificar se há dados de erros
+                dados_erros = df_com_teste[df_com_teste['Erros'].notna()]
+                
+                if not dados_erros.empty:
+                    # Métricas principais de erros
+                    st.markdown("#### 📊 **Métricas de Erros**")
+                    
+                    col_err1, col_err2, col_err3, col_err4 = st.columns(4)
+                    
+                    with col_err1:
+                        total_erros = contar_total_erros(dados_erros)
+                        st.metric("🔢 Total de Erros", f"{total_erros:,}")
+                    
+                    with col_err2:
+                        media_erros = calcular_media_erros_por_teste(dados_erros)
+                        st.metric("📊 Média por Teste", f"{media_erros:.1f}")
+                    
+                    with col_err3:
+                        distribuicao = analisar_distribuicao_erros(dados_erros)
+                        if distribuicao:
+                            st.metric("📈 Máximo de Erros", f"{distribuicao['max_erros_teste']}")
+                    
+                    with col_err4:
+                        if distribuicao:
+                            testes_com_erro = distribuicao['testes_com_erro']
+                            total_testes = distribuicao['total_testes']
+                            taxa = (testes_com_erro / total_testes * 100) if total_testes > 0 else 0
+                            st.metric("⚠️ Taxa c/ Erro", f"{taxa:.1f}%")
+                    
+                    st.markdown("---")
+                    
+                    # Gráficos de análise de erros
+                    st.markdown("#### 📈 **Análise Visual de Erros**")
+                    
+                    col_graf_err1, col_graf_err2 = st.columns(2)
+                    
+                    with col_graf_err1:
+                        # Erros por time
+                        fig_erros_time = grafico_erros_coluna_por_time(dados_erros)
+                        if fig_erros_time:
+                            st.plotly_chart(fig_erros_time, use_container_width=True, key="erros_coluna_por_time")
+                        
+                        # Distribuição de erros
+                        fig_dist_erros = grafico_distribuicao_erros(dados_erros)
+                        if fig_dist_erros:
+                            st.plotly_chart(fig_dist_erros, use_container_width=True, key="distribuicao_erros")
+                    
+                    with col_graf_err2:
+                        # Erros por testador
+                        fig_erros_testador = grafico_erros_por_testador(dados_erros)
+                        if fig_erros_testador:
+                            st.plotly_chart(fig_erros_testador, use_container_width=True, key="erros_por_testador")
+                        
+                        # Média de erros por time
+                        fig_media_erros = grafico_media_erros_por_time(dados_erros)
+                        if fig_media_erros:
+                            st.plotly_chart(fig_media_erros, use_container_width=True, key="media_erros_por_time")
+                    
+                    st.markdown("---")
+                    
+                    # Insights automáticos sobre erros
+                    st.markdown("#### 💡 **Insights sobre Erros**")
+                    
+                    insights_erros = []
+                    
+                    # Insight sobre total de erros
+                    if total_erros > 0:
+                        if media_erros > 2:
+                            insights_erros.append(f"🚨 **ATENÇÃO**: Média de {media_erros:.1f} erros por teste é alta - revisar processos")
+                        elif media_erros > 1:
+                            insights_erros.append(f"⚠️ Média de {media_erros:.1f} erros por teste - monitorar tendência")
+                        else:
+                            insights_erros.append(f"✅ Média de {media_erros:.1f} erros por teste está em nível aceitável")
+                    
+                    # Insight sobre distribuição
+                    if distribuicao:
+                        if distribuicao['max_erros_teste'] > 5:
+                            insights_erros.append(f"🔍 **CRÍTICO**: Teste com {distribuicao['max_erros_teste']} erros requer investigação")
+                        
+                        taxa_sem_erro = (distribuicao['testes_sem_erro'] / distribuicao['total_testes'] * 100) if distribuicao['total_testes'] > 0 else 0
+                        if taxa_sem_erro > 70:
+                            insights_erros.append(f"✅ {taxa_sem_erro:.1f}% dos testes não encontraram erros - boa qualidade")
+                        elif taxa_sem_erro < 50:
+                            insights_erros.append(f"⚠️ Apenas {taxa_sem_erro:.1f}% dos testes não encontraram erros - revisar qualidade")
+                    
+                    # Insight sobre time com mais erros
+                    erros_por_time = contar_erros_por_time(dados_erros)
+                    if not erros_por_time.empty:
+                        time_mais_erros = erros_por_time.index[0]
+                        qtd_erros_time = erros_por_time.iloc[0]
+                        insights_erros.append(f"🏢 Time **{time_mais_erros}** tem o maior número de erros ({qtd_erros_time})")
+                    
+                    # Insight sobre testador com mais erros
+                    erros_por_testador = contar_erros_por_testador(dados_erros)
+                    if not erros_por_testador.empty:
+                        testador_mais_erros = erros_por_testador.index[0]
+                        qtd_erros_testador = erros_por_testador.iloc[0]
+                        insights_erros.append(f"👤 Testador **{testador_mais_erros}** identificou mais erros ({qtd_erros_testador})")
+                    
+                    # Exibir insights
+                    for insight in insights_erros:
+                        if "CRÍTICO" in insight or "ATENÇÃO" in insight:
+                            st.error(insight)
+                        elif "⚠️" in insight:
+                            st.warning(insight)
+                        else:
+                            st.info(insight)
+                    
+                    st.markdown("---")
+                    
+                    # Tabela detalhada de erros
+                    st.markdown("#### 📋 **Dados Detalhados de Erros**")
+                    if st.checkbox("Mostrar tabela de testes com erros", key="show_erros_table"):
+                        # Filtrar apenas testes com erros > 0
+                        dados_com_erros = dados_erros[dados_erros['Erros'] > 0].sort_values('Erros', ascending=False)
+                        if not dados_com_erros.empty:
+                            st.dataframe(dados_com_erros, use_container_width=True)
+                            st.caption(f"Exibindo {len(dados_com_erros)} testes que encontraram erros")
+                            
+                            # Opção de download
+                            csv = dados_com_erros.to_csv(index=False)
+                            st.download_button(
+                                label="📥 Baixar dados de erros (CSV)",
+                                data=csv,
+                                file_name=f"analise_erros_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv"
+                            )
+                        else:
+                            st.info("📋 Nenhum teste com erros encontrado nos dados filtrados.")
+                else:
+                    st.info("📋 Nenhum dado de erro encontrado nos testes realizados.")
+            else:
+                st.warning("⚠️ Coluna 'Erros' não encontrada na planilha. Verifique se a coluna foi adicionada corretamente.")
+                st.markdown("""
+                ### ℹ️ **Sobre esta seção:**
+                
+                Esta aba analisa a coluna "Erros" da planilha, mostrando:
+                
+                - **Métricas de erros** por time e testador
+                - **Distribuição de erros** encontrados
+                - **Análise visual** com gráficos interativos
+                - **Insights automáticos** sobre padrões de erro
+                - **Exportação de dados** para análise externa
+                
+                Para usar esta funcionalidade, certifique-se de que a coluna "Erros" existe na planilha.
+                """)
+        
+        with tab7:
             st.markdown("### 🐛 **Análise Detalhada de Bugs**")
             st.markdown("*Insights profissionais sobre defeitos identificados em produção*")
             
