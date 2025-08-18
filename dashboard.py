@@ -16,6 +16,14 @@ except ImportError:
     st.error("Módulo de sustentação não encontrado. Certifique-se de que o arquivo sustentacao.py está no mesmo diretório.")
     main_sustentacao = None
 
+# Importar integração com Google Sheets
+try:
+    from google_sheets_integration import load_google_sheets_data_automatically
+    GOOGLE_SHEETS_AVAILABLE = True
+except ImportError:
+    GOOGLE_SHEETS_AVAILABLE = False
+    st.sidebar.warning("⚠️ Integração com Google Sheets não disponível. Instale as dependências: pip install gspread google-auth")
+
 st.set_page_config(
     page_title="Dashboard DelTech - QA & Sustentação",
     page_icon="📊",
@@ -24,14 +32,28 @@ st.set_page_config(
 )
 
 def carregar_dados():
+    # Tentar carregar automaticamente do Google Sheets
+    if GOOGLE_SHEETS_AVAILABLE:
+        with st.spinner("🔄 Carregando dados do Google Sheets..."):
+            df = load_google_sheets_data_automatically()
+            if df is not None:
+                st.success(f"✅ Dados carregados automaticamente! {len(df)} registros encontrados.")
+                return df
+            else:
+                st.warning("⚠️ Não foi possível carregar os dados do Google Sheets. Verifique as credenciais.")
+    
+    # Fallback para upload manual
+    st.info("📁 Faça upload do arquivo Excel como alternativa:")
     uploaded_file = st.file_uploader("Escolha o arquivo Excel", type=['xlsx', 'xls'])
     if uploaded_file is not None:
         try:
             df = pd.read_excel(uploaded_file)
+            st.success(f"✅ Arquivo carregado com sucesso! {len(df)} registros encontrados.")
             return df
         except Exception as e:
             st.error(f"Erro ao carregar arquivo: {e}")
             return None
+    
     return None
 
 def processar_dados(df):
@@ -108,24 +130,85 @@ def contar_total_bugs(df_rejeitadas):
     return total_bugs
 
 def contar_erros_por_time(df_filtrado):
-    """Conta erros por time usando a coluna 'Erros'"""
-    if df_filtrado.empty or 'Erros' not in df_filtrado.columns or 'Time' not in df_filtrado.columns:
+    """Conta erros por time considerando tanto a coluna 'Erros' quanto os motivos de rejeição"""
+    if df_filtrado.empty or 'Time' not in df_filtrado.columns:
         return pd.Series(dtype=int)
     
-    df_com_erros = df_filtrado[df_filtrado['Erros'].notna() & (df_filtrado['Erros'] > 0)]
-    if df_com_erros.empty:
-        return pd.Series(dtype=int)
+    erros_por_time = {}
     
-    erros_por_time = df_com_erros.groupby('Time')['Erros'].sum().sort_values(ascending=False)
-    return erros_por_time
+    # 1. Contar erros da coluna 'Erros' (dados mais recentes)
+    if 'Erros' in df_filtrado.columns:
+        df_temp = df_filtrado.copy()
+        df_temp['Erros'] = pd.to_numeric(df_temp['Erros'], errors='coerce').fillna(0)
+        df_com_erros = df_temp[df_temp['Erros'] > 0]
+        
+        for _, row in df_com_erros.iterrows():
+            time = row.get('Time', 'Desconhecido')
+            if time not in erros_por_time:
+                erros_por_time[time] = 0
+            erros_por_time[time] += row['Erros']
+    
+    # 2. Para registros sem dados na coluna 'Erros', usar análise de motivos (dados históricos)
+    df_sem_erros_coluna = df_filtrado[
+        (~df_filtrado['Erros'].notna()) | 
+        (pd.to_numeric(df_filtrado['Erros'], errors='coerce').fillna(0) == 0)
+    ] if 'Erros' in df_filtrado.columns else df_filtrado
+    
+    # Filtrar apenas rejeitadas para análise de motivos
+    df_rejeitadas_historicas = df_sem_erros_coluna[df_sem_erros_coluna['Status'] == 'REJEITADA']
+    
+    # Contar motivos como erros históricos por time
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    for _, row in df_rejeitadas_historicas.iterrows():
+        time = row.get('Time', 'Desconhecido')
+        if time not in erros_por_time:
+            erros_por_time[time] = 0
+        
+        for col in motivos_cols:
+            if col in row and pd.notna(row[col]) and str(row[col]).strip() != '':
+                motivo = str(row[col]).strip().lower()
+                if motivo not in ['aprovada', 'sem recusa']:
+                    erros_por_time[time] += 1
+    
+    return pd.Series(erros_por_time).sort_values(ascending=False) if erros_por_time else pd.Series(dtype=int)
 
 def contar_total_erros(df_filtrado):
-    """Conta o total de erros usando a coluna 'Erros'"""
-    if df_filtrado.empty or 'Erros' not in df_filtrado.columns:
+    """Conta o total de erros considerando tanto a coluna 'Erros' quanto os motivos de rejeição"""
+    if df_filtrado.empty:
         return 0
     
-    total_erros = df_filtrado['Erros'].fillna(0).sum()
-    return int(total_erros)
+    total_erros = 0
+    
+    # 1. Contar erros da coluna 'Erros' (dados mais recentes)
+    if 'Erros' in df_filtrado.columns:
+        erros_numericos = pd.to_numeric(df_filtrado['Erros'], errors='coerce').fillna(0)
+        total_erros += erros_numericos.sum()
+    
+    # 2. Para registros sem dados na coluna 'Erros', usar análise de motivos (dados históricos)
+    df_sem_erros_coluna = df_filtrado[
+        (~df_filtrado['Erros'].notna()) | 
+        (pd.to_numeric(df_filtrado['Erros'], errors='coerce').fillna(0) == 0)
+    ] if 'Erros' in df_filtrado.columns else df_filtrado
+    
+    # Filtrar apenas rejeitadas para análise de motivos
+    df_rejeitadas_historicas = df_sem_erros_coluna[df_sem_erros_coluna['Status'] == 'REJEITADA']
+    
+    # Contar motivos como erros históricos
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    for _, row in df_rejeitadas_historicas.iterrows():
+        for col in motivos_cols:
+            if col in row and pd.notna(row[col]) and str(row[col]).strip() != '':
+                motivo = str(row[col]).strip().lower()
+                if motivo not in ['aprovada', 'sem recusa']:
+                    total_erros += 1
+    
+    if pd.isna(total_erros) or total_erros == float('inf') or total_erros == float('-inf'):
+        return 0
+    
+    try:
+        return int(total_erros)
+    except (ValueError, OverflowError):
+        return 0
 
 def calcular_media_erros_por_teste(df_filtrado):
     """Calcula a média de erros por teste"""
@@ -141,59 +224,188 @@ def calcular_media_erros_por_teste(df_filtrado):
     return round(total_erros / total_testes, 2)
 
 def contar_erros_por_testador(df_filtrado):
-    """Conta erros por testador usando a coluna 'Erros'"""
-    if (df_filtrado.empty or 'Erros' not in df_filtrado.columns or 
-        'Responsavel pelo teste' not in df_filtrado.columns):
+    """Conta erros por testador considerando tanto a coluna 'Erros' quanto os motivos de rejeição"""
+    if df_filtrado.empty or 'Responsavel pelo teste' not in df_filtrado.columns:
         return pd.Series(dtype=int)
     
-    df_com_erros = df_filtrado[df_filtrado['Erros'].notna() & (df_filtrado['Erros'] > 0)]
-    if df_com_erros.empty:
-        return pd.Series(dtype=int)
+    erros_por_testador = {}
     
-    erros_por_testador = df_com_erros.groupby('Responsavel pelo teste')['Erros'].sum().sort_values(ascending=False)
-    return erros_por_testador
+    # 1. Contar erros da coluna 'Erros' (dados mais recentes)
+    if 'Erros' in df_filtrado.columns:
+        df_temp = df_filtrado.copy()
+        df_temp['Erros'] = pd.to_numeric(df_temp['Erros'], errors='coerce').fillna(0)
+        df_com_erros = df_temp[df_temp['Erros'] > 0]
+        
+        for _, row in df_com_erros.iterrows():
+            testador = row.get('Responsavel pelo teste', 'Desconhecido')
+            if testador not in erros_por_testador:
+                erros_por_testador[testador] = 0
+            erros_por_testador[testador] += row['Erros']
+    
+    # 2. Para registros sem dados na coluna 'Erros', usar análise de motivos (dados históricos)
+    df_sem_erros_coluna = df_filtrado[
+        (~df_filtrado['Erros'].notna()) | 
+        (pd.to_numeric(df_filtrado['Erros'], errors='coerce').fillna(0) == 0)
+    ] if 'Erros' in df_filtrado.columns else df_filtrado
+    
+    # Filtrar apenas rejeitadas para análise de motivos
+    df_rejeitadas_historicas = df_sem_erros_coluna[df_sem_erros_coluna['Status'] == 'REJEITADA']
+    
+    # Contar motivos como erros históricos por testador
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    for _, row in df_rejeitadas_historicas.iterrows():
+        testador = row.get('Responsavel pelo teste', 'Desconhecido')
+        if testador not in erros_por_testador:
+            erros_por_testador[testador] = 0
+        
+        for col in motivos_cols:
+            if col in row and pd.notna(row[col]) and str(row[col]).strip() != '':
+                motivo = str(row[col]).strip().lower()
+                if motivo not in ['aprovada', 'sem recusa']:
+                    erros_por_testador[testador] += 1
+    
+    return pd.Series(erros_por_testador).sort_values(ascending=False) if erros_por_testador else pd.Series(dtype=int)
 
 def analisar_distribuicao_erros(df_filtrado):
-    """Analisa a distribuição de erros considerando o total real de testes"""
-    if df_filtrado.empty or 'Erros' not in df_filtrado.columns:
+    """Analisa a distribuição de erros considerando tanto a coluna 'Erros' quanto os motivos históricos"""
+    if df_filtrado.empty:
         return {}
     
-    # Total real de testes (todos os registros)
     total_testes_real = len(df_filtrado)
     
-    # Testes que têm dados na coluna Erros
-    df_com_dados_erros = df_filtrado[df_filtrado['Erros'].notna()]
+    # Contar erros usando lógica híbrida (coluna 'Erros' + motivos históricos)
+    total_erros_hibrido = 0
+    testes_com_erro_hibrido = 0
     
-    # Se não há dados de erro, retornar estrutura com total real
-    if df_com_dados_erros.empty:
-        return {
-            'testes_sem_erro': 0,
-            'testes_com_erro': 0,
-            'testes_sem_dados': total_testes_real,
-            'total_testes': total_testes_real,
-            'total_com_dados': 0,
-            'max_erros_teste': 0,
-            'min_erros_teste': 0,
-            'mediana_erros': 0
-        }
+    # 1. Contar erros da coluna 'Erros' (dados mais recentes)
+    if 'Erros' in df_filtrado.columns:
+        df_temp = df_filtrado.copy()
+        df_temp['Erros'] = pd.to_numeric(df_temp['Erros'], errors='coerce').fillna(0)
+        df_com_erros = df_temp[df_temp['Erros'] > 0]
+        
+        total_erros_hibrido += df_com_erros['Erros'].sum()
+        testes_com_erro_hibrido += len(df_com_erros)
     
-    # Calcular testes com/sem erro apenas dos que têm dados
-    testes_sem_erro = len(df_com_dados_erros[df_com_dados_erros['Erros'] == 0])
-    testes_com_erro = len(df_com_dados_erros[df_com_dados_erros['Erros'] > 0])
-    testes_sem_dados = total_testes_real - len(df_com_dados_erros)
+    # 2. Para registros sem dados na coluna 'Erros', usar análise de motivos (dados históricos)
+    df_sem_erros_coluna = df_filtrado[
+        (~df_filtrado['Erros'].notna()) | 
+        (pd.to_numeric(df_filtrado['Erros'], errors='coerce').fillna(0) == 0)
+    ] if 'Erros' in df_filtrado.columns else df_filtrado
+    
+    # Filtrar apenas rejeitadas para análise de motivos
+    df_rejeitadas_historicas = df_sem_erros_coluna[df_sem_erros_coluna['Status'] == 'REJEITADA']
+    
+    # Contar motivos como erros históricos
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    testes_historicos_com_erro = set()
+    
+    for idx, row in df_rejeitadas_historicas.iterrows():
+        erros_neste_teste = 0
+        for col in motivos_cols:
+            if col in row and pd.notna(row[col]) and str(row[col]).strip() != '':
+                motivo = str(row[col]).strip().lower()
+                if motivo not in ['aprovada', 'sem recusa']:
+                    erros_neste_teste += 1
+        
+        if erros_neste_teste > 0:
+            total_erros_hibrido += erros_neste_teste
+            testes_historicos_com_erro.add(idx)
+    
+    testes_com_erro_hibrido += len(testes_historicos_com_erro)
+    testes_sem_erro_hibrido = total_testes_real - testes_com_erro_hibrido
+    
+    # Calcular métricas de distribuição
+    max_erros = 0
+    min_erros = 0
+    mediana_erros = 0
+    
+    if 'Erros' in df_filtrado.columns:
+        df_temp = df_filtrado.copy()
+        df_temp['Erros'] = pd.to_numeric(df_temp['Erros'], errors='coerce').fillna(0)
+        df_com_dados = df_temp[df_temp['Erros'].notna()]
+        if not df_com_dados.empty:
+            max_erros = df_com_dados['Erros'].max()
+            min_erros = df_com_dados['Erros'].min()
+            mediana_erros = df_com_dados['Erros'].median()
     
     analise = {
-        'testes_sem_erro': testes_sem_erro,
-        'testes_com_erro': testes_com_erro,
-        'testes_sem_dados': testes_sem_dados,
+        'testes_sem_erro': testes_sem_erro_hibrido,
+        'testes_com_erro': testes_com_erro_hibrido,
+        'testes_sem_dados': 0,  # Agora consideramos dados históricos
         'total_testes': total_testes_real,
-        'total_com_dados': len(df_com_dados_erros),
-        'max_erros_teste': df_com_dados_erros['Erros'].max() if not df_com_dados_erros.empty else 0,
-        'min_erros_teste': df_com_dados_erros['Erros'].min() if not df_com_dados_erros.empty else 0,
-        'mediana_erros': df_com_dados_erros['Erros'].median() if not df_com_dados_erros.empty else 0
+        'total_com_dados': total_testes_real,  # Todos têm dados (coluna Erros ou motivos)
+        'total_erros': total_erros_hibrido,
+        'max_erros_teste': max_erros,
+        'min_erros_teste': min_erros,
+        'mediana_erros': mediana_erros
     }
     
     return analise
+
+def analisar_qualidade_unificada(df_filtrado):
+    """Análise unificada combinando motivos qualitativos e erros quantitativos"""
+    if df_filtrado.empty:
+        return {}
+    
+    # Análise quantitativa (coluna Erros)
+    analise_erros = analisar_distribuicao_erros(df_filtrado)
+    
+    # Análise qualitativa (Motivos de rejeição)
+    df_rejeitadas = df_filtrado[df_filtrado['Status'] == 'REJEITADA'] if 'Status' in df_filtrado.columns else pd.DataFrame()
+    
+    # Contar bugs por motivos
+    total_bugs_motivos = contar_total_bugs(df_rejeitadas)
+    bugs_por_time_motivos = contar_bugs_por_time(df_rejeitadas) if not df_rejeitadas.empty else pd.Series(dtype=int)
+    
+    # Análise de motivos
+    motivos_analysis = {}
+    if not df_rejeitadas.empty:
+        motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+        motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
+        
+        if motivos_existentes:
+            todos_motivos = []
+            for col in motivos_existentes:
+                motivos = df_rejeitadas[col].dropna().tolist()
+                todos_motivos.extend(motivos)
+            
+            if todos_motivos:
+                motivos_filtrados = [motivo for motivo in todos_motivos 
+                                   if motivo.lower() not in ['aprovada', 'sem recusa']]
+                
+                if motivos_filtrados:
+                    motivos_counts = pd.Series(motivos_filtrados).value_counts()
+                    motivos_analysis = {
+                        'motivos_counts': motivos_counts.to_dict(),
+                        'motivo_mais_comum': motivos_counts.index[0] if len(motivos_counts) > 0 else None,
+                        'total_motivos_registrados': len(motivos_filtrados)
+                    }
+    
+    # Combinar análises
+    analise_unificada = {
+        # Dados quantitativos (coluna Erros)
+        'erros_quantitativos': analise_erros,
+        'total_erros_numericos': contar_total_erros(df_filtrado),
+        'media_erros_por_teste': calcular_media_erros_por_teste(df_filtrado),
+        
+        # Dados qualitativos (Motivos)
+        'bugs_qualitativos': {
+            'total_bugs_motivos': total_bugs_motivos,
+            'bugs_por_time': bugs_por_time_motivos.to_dict() if not bugs_por_time_motivos.empty else {},
+            'total_rejeitadas': len(df_rejeitadas),
+            'motivos_analysis': motivos_analysis
+        },
+        
+        # Métricas comparativas
+        'metricas_comparativas': {
+            'total_testes': len(df_filtrado),
+            'taxa_rejeicao': (len(df_rejeitadas) / len(df_filtrado) * 100) if len(df_filtrado) > 0 else 0,
+            'taxa_erros_numericos': (analise_erros.get('testes_com_erro', 0) / len(df_filtrado) * 100) if len(df_filtrado) > 0 else 0,
+            'cobertura_dados_erros': (analise_erros.get('total_com_dados', 0) / len(df_filtrado) * 100) if len(df_filtrado) > 0 else 0
+        }
+    }
+    
+    return analise_unificada
 
 # ===== FUNÇÕES PARA ANÁLISE DE BUGS =====
 
@@ -709,26 +921,38 @@ def grafico_distribuicao_erros(df_filtrado):
     return fig
 
 def grafico_media_erros_por_time(df_filtrado):
-    """Gráfico da média de erros por time"""
-    if ('Erros' not in df_filtrado.columns or 'Time' not in df_filtrado.columns):
+    """Gráfico da média de erros por time usando lógica híbrida"""
+    if 'Time' not in df_filtrado.columns:
         return None
     
-    df_com_erros = df_filtrado[df_filtrado['Erros'].notna()]
-    if df_com_erros.empty:
+    # Usar a função contar_erros_por_time que já implementa a lógica híbrida
+    erros_por_time = contar_erros_por_time(df_filtrado)
+    if erros_por_time.empty:
         return None
     
-    media_erros_time = df_com_erros.groupby('Time')['Erros'].mean().sort_values(ascending=False)
-    if media_erros_time.empty:
+    # Contar total de testes por time para calcular a média
+    testes_por_time = df_filtrado.groupby('Time').size()
+    
+    # Calcular média de erros por teste por time
+    media_erros_time = {}
+    for time in erros_por_time.index:
+        if time in testes_por_time.index and testes_por_time[time] > 0:
+            media_erros_time[time] = erros_por_time[time] / testes_por_time[time]
+    
+    if not media_erros_time:
         return None
+    
+    # Converter para Series e ordenar
+    media_erros_series = pd.Series(media_erros_time).sort_values(ascending=False)
     
     fig = px.bar(
-        x=media_erros_time.index,
-        y=media_erros_time.values,
-        title="📈 Média de Erros por Teste por Time",
+        x=media_erros_series.index,
+        y=media_erros_series.values,
+        title="📈 Média de Erros por Teste por Time (Dados Híbridos)",
         labels={'x': 'Time', 'y': 'Média de Erros por Teste'},
-        color=media_erros_time.values,
+        color=media_erros_series.values,
         color_continuous_scale='Oranges',
-        text=[f"{val:.1f}" for val in media_erros_time.values]
+        text=[f"{val:.1f}" for val in media_erros_series.values]
     )
     
     fig.update_layout(
@@ -820,6 +1044,157 @@ def grafico_heatmap_atividade(df_filtrado):
                 )
                 return fig
     return None
+
+def grafico_motivos_por_time(df_filtrado):
+    if df_filtrado.empty or 'Time' not in df_filtrado.columns:
+        return None
+    
+    df_rejeitadas = df_filtrado[df_filtrado['Status'] == 'REJEITADA']
+    if df_rejeitadas.empty:
+        return None
+    
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
+    
+    if not motivos_existentes:
+        return None
+    
+    dados_motivos = []
+    for _, row in df_rejeitadas.iterrows():
+        time = row.get('Time', 'N/A')
+        for col in motivos_existentes:
+            motivo = row.get(col)
+            if pd.notna(motivo) and motivo.lower() not in ['aprovada', 'sem recusa', '']:
+                dados_motivos.append({'Time': time, 'Motivo': motivo})
+    
+    if not dados_motivos:
+        return None
+    
+    df_motivos = pd.DataFrame(dados_motivos)
+    motivos_por_time = df_motivos.groupby(['Time', 'Motivo']).size().reset_index(name='Quantidade')
+    
+    if motivos_por_time.empty:
+        return None
+    
+    fig = px.bar(
+        motivos_por_time,
+        x='Time',
+        y='Quantidade',
+        color='Motivo',
+        title='🎯 Motivos de Rejeição por Time',
+        text='Quantidade',
+        color_discrete_sequence=px.colors.qualitative.Set3
+    )
+    
+    fig.update_traces(textposition='outside')
+    fig.update_layout(
+        title_font_color='#FFFFFF',
+        xaxis_title='Time',
+        yaxis_title='Quantidade de Ocorrências',
+        legend_title='Motivos',
+        margin=dict(t=60, b=80, l=80, r=80),
+        height=500,
+        showlegend=True
+    )
+    
+    return fig
+
+def grafico_motivos_por_desenvolvedor(df_filtrado):
+    if df_filtrado.empty or 'Responsável' not in df_filtrado.columns:
+        return None
+    
+    df_rejeitadas = df_filtrado[df_filtrado['Status'] == 'REJEITADA']
+    if df_rejeitadas.empty:
+        return None
+    
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
+    
+    if not motivos_existentes:
+        return None
+    
+    dados_motivos = []
+    for _, row in df_rejeitadas.iterrows():
+        dev = row.get('Responsável', 'N/A')
+        for col in motivos_existentes:
+            motivo = row.get(col)
+            if pd.notna(motivo) and motivo.lower() not in ['aprovada', 'sem recusa', '']:
+                dados_motivos.append({'Desenvolvedor': dev, 'Motivo': motivo})
+    
+    if not dados_motivos:
+        return None
+    
+    df_motivos = pd.DataFrame(dados_motivos)
+    motivos_por_dev = df_motivos.groupby(['Desenvolvedor', 'Motivo']).size().reset_index(name='Quantidade')
+    
+    if motivos_por_dev.empty:
+        return None
+    
+    fig = px.sunburst(
+        motivos_por_dev,
+        path=['Desenvolvedor', 'Motivo'],
+        values='Quantidade',
+        title='👨‍💻 Motivos de Rejeição por Desenvolvedor',
+        color='Quantidade',
+        color_continuous_scale='Reds'
+    )
+    
+    fig.update_layout(
+        title_font_color='#FFFFFF',
+        margin=dict(t=60, b=80, l=80, r=80),
+        height=500
+    )
+    
+    return fig
+
+def grafico_ranking_problemas(df_filtrado):
+    if df_filtrado.empty:
+        return None
+    
+    df_rejeitadas = df_filtrado[df_filtrado['Status'] == 'REJEITADA']
+    if df_rejeitadas.empty:
+        return None
+    
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
+    
+    if not motivos_existentes:
+        return None
+    
+    todos_motivos = []
+    for col in motivos_existentes:
+        motivos = df_rejeitadas[col].dropna().tolist()
+        todos_motivos.extend(motivos)
+    
+    motivos_filtrados = [motivo for motivo in todos_motivos 
+                        if motivo.lower() not in ['aprovada', 'sem recusa', '']]
+    
+    if not motivos_filtrados:
+        return None
+    
+    ranking_motivos = pd.Series(motivos_filtrados).value_counts().head(10)
+    
+    fig = px.bar(
+        x=ranking_motivos.values,
+        y=ranking_motivos.index,
+        orientation='h',
+        title='🏆 Top 10 - Tipos de Problemas Mais Encontrados',
+        text=ranking_motivos.values,
+        color=ranking_motivos.values,
+        color_continuous_scale='Reds'
+    )
+    
+    fig.update_traces(textposition='outside')
+    fig.update_layout(
+        title_font_color='#FFFFFF',
+        xaxis_title='Quantidade de Ocorrências',
+        yaxis_title='Tipo de Problema',
+        margin=dict(t=60, b=80, l=80, r=80),
+        height=500,
+        yaxis={'categoryorder': 'total ascending'}
+    )
+    
+    return fig
 
 def grafico_motivos_recusa_por_dev(df_filtrado):
     """Gráfico mostrando total de rejeições por desenvolvedor"""
@@ -981,8 +1356,8 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
         st.metric(
             "📊 Cobertura de Testes", 
             f"{cobertura_teste:.1f}%",
-            delta=f"{total_testes_efetuados} de {total_planilha} tarefas",
-            help="Percentual de tarefas que receberam validação de qualidade"
+            delta=f"✅ {total_testes_efetuados:,} testadas | 📋 {total_planilha:,} total",
+            help=f"Percentual de cobertura: {total_testes_efetuados:,} tarefas testadas de {total_planilha:,} tarefas totais. Meta recomendada: >80%"
         )
     
     with col2:
@@ -993,8 +1368,8 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
         st.metric(
             "📋 Tarefas Validadas", 
             f"{tarefas_unicas:,}",
-            delta="tarefas únicas testadas",
-            help="Número de tarefas diferentes que passaram por validação de qualidade"
+            delta="📝 tarefas únicas no período",
+            help="Número de tarefas diferentes que passaram por validação de qualidade no período selecionado"
         )
     
     with col3:
@@ -1005,8 +1380,8 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
         st.metric(
             "🏢 Times Atendidos", 
             f"{times_atendidos}",
-            delta="times de desenvolvimento",
-            help="Número de times de desenvolvimento com cobertura de Q.A"
+            delta="👥 equipes com cobertura QA",
+            help="Número de times de desenvolvimento que receberam cobertura de Quality Assurance no período"
         )
     
     # Removido: Equipe Q.A Ativa
@@ -1019,17 +1394,18 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
         st.metric(
             "🚫 Bugs Interceptados", 
             f"{total_bugs_encontrados:,}",
-            delta="problemas evitados em produção",
-            help="Total de defeitos identificados e corrigidos antes da entrega"
+            delta="🛡️ defeitos evitados em produção",
+            help=f"Total de {total_bugs_encontrados:,} defeitos identificados e corrigidos antes da entrega ao cliente"
         )
     
     with col6:
         taxa_deteccao = (total_bugs_encontrados / total_testes_efetuados * 100) if total_testes_efetuados > 0 else 0
+        rejeitadas = len(df_filtrado[df_filtrado['Status'] == 'REJEITADA']) if 'Status' in df_filtrado.columns else 0
         st.metric(
             "🔍 Taxa de Detecção", 
             f"{taxa_deteccao:.1f}%",
-            delta="eficiência na identificação",
-            help="Percentual de bugs detectados em relação aos testes realizados"
+            delta=f"🚨 {rejeitadas:,} testes c/ problemas | ✅ {total_testes_efetuados - rejeitadas:,} aprovados",
+            help=f"Percentual de testes que identificaram problemas: {rejeitadas:,} de {total_testes_efetuados:,} testes. Taxa ideal: 15-25% (indica qualidade adequada do código)"
         )
     
     with col7:
@@ -1037,8 +1413,8 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
         st.metric(
             "✅ Taxa de Aprovação", 
             f"{taxa_aprovacao:.1f}%",
-            delta=f"{aprovadas} testes aprovados",
-            help="Percentual de testes que passaram na primeira validação"
+            delta=f"✅ {aprovadas:,} aprovados | 🚨 {total_testes_efetuados - aprovadas:,} rejeitados",
+            help=f"Percentual de aprovação na primeira validação: {aprovadas:,} de {total_testes_efetuados:,} testes. Meta recomendada: >75%"
         )
     
     # === SEÇÃO 3: ANÁLISE DE ERROS ===
@@ -1048,20 +1424,22 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
         
         with col_e1:
             total_erros = contar_total_erros(df_filtrado)
+            tempo_correcao_estimado = total_erros * 45  # 45 min por erro em média
             st.metric(
                 "🔢 Total de Erros", 
                 f"{total_erros:,}",
-                delta="erros identificados",
-                help="Número total de erros encontrados em todos os testes"
+                delta=f"⏱️ ≈{tempo_correcao_estimado/60:.1f}h de correção estimada",
+                help=f"Total de {total_erros:,} erros identificados em {total_testes_efetuados:,} testes. Tempo estimado de correção: {tempo_correcao_estimado:,} minutos ({tempo_correcao_estimado/60:.1f} horas)"
             )
         
         with col_e2:
             media_erros = calcular_media_erros_por_teste(df_filtrado)
+            classificacao = "Baixa" if media_erros < 2 else "Média" if media_erros < 4 else "Alta"
             st.metric(
                 "📊 Média de Erros/Teste", 
                 f"{media_erros:.1f}",
-                delta="erros por teste",
-                help="Média de erros encontrados por teste realizado"
+                delta=f"📈 Complexidade {classificacao.lower()}",
+                help=f"Média de {media_erros:.1f} erros por teste. Classificação: {classificacao} (Baixa: <2, Média: 2-4, Alta: >4)"
             )
         
         with col_e3:
@@ -1070,11 +1448,12 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
                 testes_com_erro = distribuicao_erros['testes_com_erro']
                 total_testes_real = distribuicao_erros['total_testes']
                 taxa_testes_com_erro = (testes_com_erro / total_testes_real * 100) if total_testes_real > 0 else 0
+                testes_sem_erro = total_testes_real - testes_com_erro
                 st.metric(
                     "⚠️ Taxa de Testes c/ Erro", 
                     f"{taxa_testes_com_erro:.1f}%",
-                    delta=f"{testes_com_erro} de {total_testes_real} testes",
-                    help="Percentual de testes que encontraram pelo menos um erro"
+                    delta=f"🚨 {testes_com_erro:,} c/ erro | ✅ {testes_sem_erro:,} limpos",
+                    help=f"De {total_testes_real:,} testes realizados: {testes_com_erro:,} encontraram erros e {testes_sem_erro:,} foram aprovados sem problemas"
                 )
     
     # === SEÇÃO 4: ANÁLISE DE RISCOS E PONTOS CRÍTICOS ===
@@ -1090,9 +1469,9 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
                 st.metric(
                     "🚨 Time com Maior Risco", 
                     f"{time_critico}",
-                    delta=f"{bugs_time_critico} bugs identificados",
+                    delta=f"🐛 {bugs_time_critico} defeitos encontrados",
                     delta_color="inverse",
-                    help="Time que apresentou maior número de defeitos - requer atenção especial"
+                    help=f"Time {time_critico} apresentou {bugs_time_critico} defeitos no período - requer atenção especial e revisão de processos"
                 )
     
     with col10:
@@ -1115,10 +1494,10 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
                         ocorrencias_motivo = pd.Series(motivos_filtrados).value_counts().iloc[0]
                         st.metric(
                             "🔍 Principal Tipo de Defeito", 
-                            f"{motivo_mais_comum[:15]}...",
-                            delta=f"{ocorrencias_motivo} ocorrências",
+                            motivo_mais_comum,
+                            delta=f"📊 {ocorrencias_motivo}x identificado no período",
                             delta_color="inverse",
-                            help="Tipo de defeito mais frequente - oportunidade de melhoria no processo"
+                            help=f"Defeito mais frequente: '{motivo_mais_comum}' com {ocorrencias_motivo} ocorrências - oportunidade de melhoria no processo de desenvolvimento"
                         )
     
     with col11:
@@ -1126,9 +1505,9 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
         st.metric(
             "⚠️ Tarefas Sem Cobertura", 
             f"{taxa_sem_teste:.1f}%",
-            delta=f"{total_sem_teste} tarefas",
+            delta=f"🚫 {total_sem_teste} sem teste | ✅ {total_planilha - total_sem_teste} testadas",
             delta_color="inverse" if taxa_sem_teste > 20 else "normal",
-            help="Percentual de tarefas que não receberam validação de qualidade"
+            help=f"De {total_planilha} tarefas: {total_sem_teste} não receberam validação ({taxa_sem_teste:.1f}%) e {total_planilha - total_sem_teste} foram testadas. Meta: <20% sem cobertura"
         )
     
     # === RESUMO EXECUTIVO REMOVIDO ===
@@ -1249,11 +1628,39 @@ def main():
         st.markdown("---")
         
         # Criar abas para organizar o dashboard
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📌 Visão Geral Estratégica", "🛡️ Prevenção e Qualidade", "🏁 Visão por Sprint", "🧑‍🤝‍🧑 Visão por Testador", "📋 Tarefas Sem Teste", "🔢 Análise de Erros", "🐛 Análise de Bugs"])
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["📌 Visão Geral Estratégica", "🛡️ Prevenção e Qualidade", "🏁 Visão por Sprint", "🧑‍🤝‍🧑 Visão por Testador", "📋 Tarefas Sem Teste", "🔢 Análise de Erros", "🐛 Análise de Bugs", "📊 Relatório P.M."])
         
         with tab1:
             st.markdown("### 📌 **Visão Geral Estratégica**")
-            st.markdown("*Cobertura e impacto do time de Q.A*")
+            st.markdown("*Dashboard Executivo - Impacto e Performance do Time de Qualidade*")
+            
+            # === RESUMO EXECUTIVO PARA DIRETORIA ===
+            st.markdown("#### 🎯 **Resumo Executivo - Principais Indicadores**")
+            
+            # Calcular métricas principais para o resumo
+            total_planilha = len(df)
+            total_testes_efetuados = len(df_com_teste)
+            cobertura_teste = (total_testes_efetuados / total_planilha * 100) if total_planilha > 0 else 0
+            aprovadas = len(df_com_teste[df_com_teste['Status'] == 'APROVADA']) if 'Status' in df_com_teste.columns else 0
+            rejeitadas = len(df_com_teste[df_com_teste['Status'] == 'REJEITADA']) if 'Status' in df_com_teste.columns else 0
+            taxa_aprovacao = (aprovadas / total_testes_efetuados * 100) if total_testes_efetuados > 0 else 0
+            
+            # Resumo em destaque
+            col_resumo1, col_resumo2, col_resumo3 = st.columns(3)
+            
+            with col_resumo1:
+                status_cobertura = "🟢 Excelente" if cobertura_teste >= 80 else "🟡 Boa" if cobertura_teste >= 60 else "🔴 Crítica"
+                st.info(f"**📊 Cobertura de Testes:** {cobertura_teste:.1f}% ({total_testes_efetuados:,}/{total_planilha:,} tarefas)\n\n**Status:** {status_cobertura}")
+            
+            with col_resumo2:
+                status_qualidade = "🟢 Excelente" if taxa_aprovacao >= 75 else "🟡 Boa" if taxa_aprovacao >= 60 else "🔴 Atenção"
+                st.info(f"**✅ Taxa de Aprovação:** {taxa_aprovacao:.1f}% ({aprovadas:,}/{total_testes_efetuados:,} testes)\n\n**Status:** {status_qualidade}")
+            
+            with col_resumo3:
+                bugs_encontrados = contar_total_bugs(df_com_teste[df_com_teste['Status'] == 'REJEITADA']) if not df_com_teste.empty else 0
+                st.info(f"**🚫 Bugs Interceptados:** {bugs_encontrados:,} problemas\n\n**Status:** Problemas identificados antes da produção")
+            
+            st.markdown("---")
             
             # Métricas executivas principais
             metricas_resumo(df_com_teste, df, df_sem_teste)
@@ -1291,10 +1698,124 @@ def main():
                 fig_taxa_rejeicao = grafico_taxa_rejeicao_por_time(df_com_teste)
                 if fig_taxa_rejeicao:
                     st.plotly_chart(fig_taxa_rejeicao, use_container_width=True, key="taxa_rejeicao_exec")
+            
+            st.markdown("---")
+            
+            # === RECOMENDAÇÕES ESTRATÉGICAS PARA DIRETORIA ===
+            st.markdown("#### 🎯 **Recomendações Estratégicas**")
+            
+            if not df_com_teste.empty:
+                # Calcular métricas para recomendações
+                total_testes = len(df_com_teste)
+                aprovados = len(df_com_teste[df_com_teste['Status'] == 'APROVADA'])
+                rejeitados = len(df_com_teste[df_com_teste['Status'] == 'REJEITADA'])
+                taxa_aprovacao = (aprovados / total_testes * 100) if total_testes > 0 else 0
+                
+                col_rec1, col_rec2, col_rec3 = st.columns(3)
+                
+                with col_rec1:
+                    if taxa_aprovacao >= 80:
+                        st.success(f"**✅ QUALIDADE EXCELENTE**\n\nTaxa de aprovação: {taxa_aprovacao:.1f}%\n\n**Ação:** Manter padrão atual e documentar boas práticas para replicação.")
+                    elif taxa_aprovacao >= 60:
+                        st.warning(f"**⚠️ QUALIDADE MODERADA**\n\nTaxa de aprovação: {taxa_aprovacao:.1f}%\n\n**Ação:** Implementar treinamentos específicos nos times com maior rejeição.")
+                    else:
+                        st.error(f"**🚨 QUALIDADE CRÍTICA**\n\nTaxa de aprovação: {taxa_aprovacao:.1f}%\n\n**Ação:** Intervenção imediata necessária - revisar processos de desenvolvimento.")
+                
+                with col_rec2:
+                    # Análise de Eficiência
+                    bugs_interceptados = contar_total_bugs(df_com_teste[df_com_teste['Status'] == 'REJEITADA'])
+                    eficiencia = (bugs_interceptados / total_testes * 100) if total_testes > 0 else 0
+                    
+                    if eficiencia >= 30:
+                        st.success(f"**🎯 EFICIÊNCIA ALTA**\n\nDetecção: {eficiencia:.1f}%\n\n**{bugs_interceptados} bugs** encontrados em **{total_testes} testes**")
+                    elif eficiencia >= 15:
+                        st.info(f"**📊 EFICIÊNCIA MODERADA**\n\nDetecção: {eficiencia:.1f}%\n\n**{bugs_interceptados} bugs** encontrados em **{total_testes} testes**")
+                    else:
+                        st.warning(f"**⚠️ BAIXA DETECÇÃO**\n\nDetecção: {eficiencia:.1f}%\n\n**Ação:** Revisar critérios de teste para melhor detecção.")
+                
+                with col_rec3:
+                    # Análise de cobertura
+                    total_tasks = len(df) if not df.empty else 0
+                    cobertura = (total_testes / total_tasks * 100) if total_tasks > 0 else 0
+                    
+                    if cobertura >= 90:
+                        st.success(f"**🎯 COBERTURA EXCELENTE**\n\nCobertura: {cobertura:.1f}%\n\n**Status:** Meta de cobertura atingida com sucesso.")
+                    elif cobertura >= 70:
+                        st.warning(f"**📊 COBERTURA MODERADA**\n\nCobertura: {cobertura:.1f}%\n\n**Ação:** Expandir cobertura para atingir meta de 90%.")
+                    else:
+                        st.error(f"**🚨 COBERTURA BAIXA**\n\nCobertura: {cobertura:.1f}%\n\n**Ação:** Urgente - aumentar significativamente a cobertura de testes.")
+                
+                # Resumo executivo final
+                st.markdown("##### 📋 **Resumo Executivo para Diretoria**")
+                
+                resumo_status = "🟢 SAUDÁVEL" if taxa_aprovacao >= 70 and cobertura >= 70 else "🟡 ATENÇÃO" if taxa_aprovacao >= 50 and cobertura >= 50 else "🔴 CRÍTICO"
+                
+                st.info(f"**Status Geral do QA:** {resumo_status}\n\n"
+                       f"• **{total_testes:,} testes** realizados com **{taxa_aprovacao:.1f}% de aprovação**\n"
+                       f"• **{bugs_interceptados} bugs interceptados** antes da produção\n"
+                       f"• **Cobertura de {cobertura:.1f}%** das tasks de desenvolvimento\n"
+                       f"• **Eficiência de detecção:** {(bugs_interceptados/total_testes*100):.1f}% dos testes encontraram problemas")
+            else:
+                st.info("📋 Dados insuficientes para gerar recomendações estratégicas")
         
         with tab2:
             st.markdown("### 🛡️ **Prevenção e Qualidade**")
-            st.markdown("*Bugs identificados, tipos de falha e taxas de aprovação*")
+            st.markdown("*Análise unificada: bugs identificados (motivos) + erros encontrados (quantitativos)*")
+            
+            # Análise unificada de qualidade
+            analise_unificada = analisar_qualidade_unificada(df_com_teste)
+            
+            if analise_unificada:
+                # Seção de comparação entre as duas abordagens
+                st.markdown("#### 📊 **Visão Comparativa: Motivos vs Erros Numéricos**")
+                
+                col_comp1, col_comp2, col_comp3, col_comp4 = st.columns(4)
+                
+                with col_comp1:
+                    bugs_motivos = analise_unificada['bugs_qualitativos']['total_bugs_motivos']
+                    st.metric(
+                        "🐛 Bugs por Motivos", 
+                        f"{bugs_motivos}",
+                        help="Total de bugs identificados através dos motivos de rejeição (análise qualitativa)"
+                    )
+                
+                with col_comp2:
+                    erros_numericos = analise_unificada['total_erros_numericos']
+                    st.metric(
+                        "🔢 Erros Numéricos", 
+                        f"{erros_numericos}",
+                        help="Total de erros contabilizados na coluna 'Erros' (análise quantitativa)"
+                    )
+                
+                with col_comp3:
+                    taxa_rejeicao = analise_unificada['metricas_comparativas']['taxa_rejeicao']
+                    st.metric(
+                        "📉 Taxa de Rejeição", 
+                        f"{taxa_rejeicao:.1f}%",
+                        help="Percentual de testes rejeitados (com motivos de falha)"
+                    )
+                
+                with col_comp4:
+                    taxa_erros = analise_unificada['metricas_comparativas']['taxa_erros_numericos']
+                    st.metric(
+                        "⚠️ Taxa c/ Erros", 
+                        f"{taxa_erros:.1f}%",
+                        help="Percentual de testes que encontraram erros (coluna numérica)"
+                    )
+                
+                # Explicação das diferenças
+                st.info("""
+                💡 **Entendendo as Métricas:**
+                
+                - **Bugs por Motivos**: Análise qualitativa baseada nos motivos de rejeição (Motivo, Motivo2, Motivo3)
+                - **Erros Numéricos**: Análise quantitativa baseada na coluna 'Erros' que conta o número de erros encontrados
+                - **Taxa de Rejeição**: Percentual de testes que foram rejeitados por algum motivo
+                - **Taxa c/ Erros**: Percentual de testes que encontraram pelo menos um erro numérico
+                
+                Ambas as métricas são complementares e oferecem perspectivas diferentes sobre a qualidade.
+                """)
+                
+                st.markdown("---")
             
             # Análise de bugs e qualidade
             st.markdown("#### 🚨 **Bugs Identificados por Time**")
@@ -1350,22 +1871,107 @@ def main():
                             st.plotly_chart(fig_pizza, use_container_width=True, key="distribuicao_bugs_pizza")
             
             st.markdown("---")
+            
+            # Nova seção de comparação visual
+            if analise_unificada:
+                st.markdown("#### 🔄 **Comparação Visual: Duas Perspectivas de Qualidade**")
+                
+                col_comp_visual1, col_comp_visual2 = st.columns(2)
+                
+                with col_comp_visual1:
+                    st.markdown("##### 📝 **Análise Qualitativa (Motivos)**")
+                    
+                    # Gráfico de motivos de rejeição
+                    fig_motivos = grafico_motivos_rejeicao(df_com_teste)
+                    if fig_motivos:
+                        fig_motivos.update_traces(
+                            marker_color=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57'],
+                            text=[f'✅ Mais comum' if i == 0 else '' for i in range(len(fig_motivos.data[0].x))],
+                            textposition='outside'
+                        )
+                        fig_motivos.update_layout(title_font_color='#FFFFFF')
+                        st.plotly_chart(fig_motivos, use_container_width=True, key="motivos_rejeicao_principal")
+                    
+                    # Insights sobre motivos
+                    motivos_analysis = analise_unificada['bugs_qualitativos']['motivos_analysis']
+                    if motivos_analysis and 'motivo_mais_comum' in motivos_analysis and motivos_analysis['motivo_mais_comum']:
+                        st.success(f"🎯 **Motivo mais comum**: {motivos_analysis['motivo_mais_comum']}")
+                    else:
+                        # Fallback: buscar diretamente nos dados
+                        df_rejeitadas = df_com_teste[df_com_teste['Status'] == 'REJEITADA'] if 'Status' in df_com_teste.columns else pd.DataFrame()
+                        if not df_rejeitadas.empty:
+                            motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+                            todos_motivos = []
+                            for col in motivos_cols:
+                                if col in df_rejeitadas.columns:
+                                    motivos = df_rejeitadas[col].dropna().tolist()
+                                    todos_motivos.extend(motivos)
+                            
+                            if todos_motivos:
+                                motivos_filtrados = [motivo for motivo in todos_motivos 
+                                                   if motivo.lower() not in ['aprovada', 'sem recusa', '']]
+                                if motivos_filtrados:
+                                    motivo_mais_comum = pd.Series(motivos_filtrados).value_counts().index[0]
+                                    ocorrencias = pd.Series(motivos_filtrados).value_counts().iloc[0]
+                                    st.success(f"🎯 **Motivo mais comum**: {motivo_mais_comum} ({ocorrencias} ocorrências)")
+                                else:
+                                    st.info("📝 Nenhum motivo específico identificado nos dados filtrados")
+                            else:
+                                st.info("📝 Nenhum motivo registrado nos dados disponíveis")
+                        else:
+                            st.info("📝 Nenhuma tarefa rejeitada encontrada nos dados filtrados")
+                
+                with col_comp_visual2:
+                    st.markdown("##### 🔢 **Análise Quantitativa (Erros)**")
+                    
+                    # Gráfico de distribuição de erros
+                    fig_dist_erros = grafico_distribuicao_erros(df_com_teste)
+                    if fig_dist_erros:
+                        st.plotly_chart(fig_dist_erros, use_container_width=True, key="distribuicao_erros_comparativo")
+                    
+                    # Gráfico de erros por time (coluna numérica)
+                    fig_erros_numericos = grafico_erros_coluna_por_time(df_com_teste)
+                    if fig_erros_numericos:
+                        st.plotly_chart(fig_erros_numericos, use_container_width=True, key="erros_numericos_time")
+                
+                # Explicação detalhada das diferenças
+                st.markdown("#### 📚 **Entendendo as Duas Abordagens de Análise**")
+                
+                st.info("""
+                **🔍 Diferenças entre as Métricas:**
+                
+                **📝 Análise Qualitativa (Motivos):**
+                - Baseada nas colunas 'Motivo', 'Motivo2', 'Motivo3'
+                - Identifica **tipos de problemas** encontrados
+                - Foca na **natureza dos defeitos** (ex: erro de lógica, interface, etc.)
+                - Útil para **prevenção** e melhoria de processos
+                
+                **🔢 Análise Quantitativa (Erros):**
+                - Baseada na coluna numérica 'Erros'
+                - Conta **quantidade total** de erros encontrados
+                - Foca no **volume de problemas** por teste
+                - Útil para **métricas de produtividade** e eficiência
+                
+                **💡 Por que usar ambas?**
+                - **Complementares**: Uma mostra 'o quê', outra mostra 'quanto'
+                - **Visão completa**: Qualidade + Quantidade = Análise robusta
+                - **Decisões melhores**: Dados qualitativos + quantitativos
+                """)
+                
+                st.markdown("---")
+            
             st.markdown("#### 🔍 **Tipos de Falha e Motivos**")
             
             col_motivos1, col_motivos2 = st.columns(2)
             
             with col_motivos1:
-                # Tipo de falha mais comum
-                fig_motivos = grafico_motivos_rejeicao(df_com_teste)
-                if fig_motivos:
-                    # Melhorar cores e destacar o mais comum
-                    fig_motivos.update_traces(
-                        marker_color=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57'],
-                        text=[f'✅ Mais comum' if i == 0 else '' for i in range(len(fig_motivos.data[0].x))],
-                        textposition='outside'
-                    )
-                    fig_motivos.update_layout(title_font_color='#FFFFFF')
-                    st.plotly_chart(fig_motivos, use_container_width=True, key="motivos_rejeicao_principal")
+                # Taxa de aprovação vs rejeição (barras + pizza)
+                if not df_com_teste.empty and 'Status' in df_com_teste.columns:
+                    status_counts = df_com_teste['Status'].value_counts()
+                    if len(status_counts) > 1:
+                        import plotly.express as px
+                        st.markdown("**📊 Análise Qualitativa - Motivos de Rejeição**")
+                        st.info("Esta seção foca nos motivos e causas dos problemas encontrados, permitindo identificar padrões e oportunidades de melhoria no processo de desenvolvimento.")
             
             with col_motivos2:
                 # Taxa de aprovação vs rejeição (barras + pizza)
@@ -1392,14 +1998,132 @@ def main():
                         st.plotly_chart(fig_aprovacao, use_container_width=True, key="taxa_aprovacao_barras")
             
             st.markdown("---")
-            st.markdown("#### 👨‍💻 **Análise por Desenvolvedor**")
+            st.markdown("#### 🎯 **Análise Detalhada de Motivos por Time**")
             
-            # Novo gráfico: Motivos de recusa por desenvolvedor
-            fig_motivos_dev = grafico_motivos_recusa_por_dev(df_com_teste)
-            if fig_motivos_dev:
-                st.plotly_chart(fig_motivos_dev, use_container_width=True, key="motivos_recusa_por_dev")
+            col_time1, col_time2 = st.columns(2)
+            
+            with col_time1:
+                # Gráfico de motivos por time
+                fig_motivos_time = grafico_motivos_por_time(df_com_teste)
+                if fig_motivos_time:
+                    st.plotly_chart(fig_motivos_time, use_container_width=True, key="motivos_por_time")
+                else:
+                    st.info("📋 Dados insuficientes para análise de motivos por time")
+            
+            with col_time2:
+                # Ranking dos problemas mais encontrados
+                fig_ranking = grafico_ranking_problemas(df_com_teste)
+                if fig_ranking:
+                    st.plotly_chart(fig_ranking, use_container_width=True, key="ranking_problemas")
+                else:
+                    st.info("📋 Dados insuficientes para ranking de problemas")
+            
+            st.markdown("---")
+            st.markdown("#### 👨‍💻 **Análise Detalhada por Desenvolvedor**")
+            
+            col_dev1, col_dev2 = st.columns(2)
+            
+            with col_dev1:
+                # Gráfico sunburst de motivos por desenvolvedor
+                fig_motivos_dev_sun = grafico_motivos_por_desenvolvedor(df_com_teste)
+                if fig_motivos_dev_sun:
+                    st.plotly_chart(fig_motivos_dev_sun, use_container_width=True, key="motivos_por_desenvolvedor")
+                else:
+                    st.info("📋 Dados insuficientes para análise de motivos por desenvolvedor")
+            
+            with col_dev2:
+                # Gráfico de barras: Motivos de recusa por desenvolvedor
+                fig_motivos_dev = grafico_motivos_recusa_por_dev(df_com_teste)
+                if fig_motivos_dev:
+                    st.plotly_chart(fig_motivos_dev, use_container_width=True, key="motivos_recusa_por_dev")
+                else:
+                    st.info("📋 Dados insuficientes para análise de rejeições por desenvolvedor (mínimo 2 rejeições por dev)")
+            
+            st.markdown("---")
+            
+            # === INSIGHTS EXECUTIVOS PARA GERÊNCIA ===
+            st.markdown("#### 🎯 **Insights Executivos - Análise de Problemas por Time**")
+            
+            if not df_com_teste.empty:
+                df_rejeitadas = df_com_teste[df_com_teste['Status'] == 'REJEITADA']
+                
+                if not df_rejeitadas.empty and 'Time' in df_rejeitadas.columns:
+                    # Análise de problemas por time
+                    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+                    motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
+                    
+                    if motivos_existentes:
+                        dados_analise = []
+                        for _, row in df_rejeitadas.iterrows():
+                            time = row.get('Time', 'N/A')
+                            for col in motivos_existentes:
+                                motivo = row.get(col)
+                                if pd.notna(motivo) and motivo.lower() not in ['aprovada', 'sem recusa', '']:
+                                    dados_analise.append({'Time': time, 'Motivo': motivo})
+                        
+                        if dados_analise:
+                            df_analise = pd.DataFrame(dados_analise)
+                            
+                            col_insight1, col_insight2 = st.columns(2)
+                            
+                            with col_insight1:
+                                # Time com mais problemas
+                                problemas_por_time = df_analise['Time'].value_counts()
+                                time_critico = problemas_por_time.index[0]
+                                qtd_problemas = problemas_por_time.iloc[0]
+                                
+                                st.error(f"**🚨 Time com Maior Necessidade de Atenção**\n\n**{time_critico}** - {qtd_problemas} problemas identificados\n\nRecomendação: Revisar processos e oferecer treinamento específico.")
+                            
+                            with col_insight2:
+                                # Problema mais comum
+                                problema_comum = df_analise['Motivo'].value_counts().index[0]
+                                qtd_comum = df_analise['Motivo'].value_counts().iloc[0]
+                                
+                                st.warning(f"**⚠️ Problema Mais Recorrente**\n\n**{problema_comum}** - {qtd_comum} ocorrências\n\nRecomendação: Implementar checklist preventivo para este tipo de erro.")
+                            
+                            # Análise de distribuição de problemas
+                            st.markdown("##### 📊 **Distribuição de Problemas por Time**")
+                            
+                            col_dist1, col_dist2 = st.columns(2)
+                            
+                            with col_dist1:
+                                # Tabela de problemas por time
+                                tabela_problemas = df_analise.groupby('Time').agg({
+                                    'Motivo': ['count', lambda x: x.nunique()]
+                                }).round(2)
+                                tabela_problemas.columns = ['Total Problemas', 'Tipos Diferentes']
+                                tabela_problemas = tabela_problemas.sort_values('Total Problemas', ascending=False)
+                                
+                                st.dataframe(
+                                    tabela_problemas,
+                                    use_container_width=True,
+                                    column_config={
+                                        "Total Problemas": st.column_config.NumberColumn(
+                                            "Total de Problemas",
+                                            help="Quantidade total de problemas encontrados"
+                                        ),
+                                        "Tipos Diferentes": st.column_config.NumberColumn(
+                                            "Tipos Diferentes",
+                                            help="Variedade de tipos de problemas"
+                                        )
+                                    }
+                                )
+                            
+                            with col_dist2:
+                                # Top 5 problemas mais comuns
+                                top_problemas = df_analise['Motivo'].value_counts().head(5)
+                                
+                                st.markdown("**🏆 Top 5 Problemas Mais Comuns:**")
+                                for i, (problema, qtd) in enumerate(top_problemas.items(), 1):
+                                    st.markdown(f"{i}. **{problema}** - {qtd} ocorrências")
+                        else:
+                            st.info("📋 Nenhum motivo de rejeição encontrado para análise")
+                    else:
+                        st.info("📋 Colunas de motivos não encontradas nos dados")
+                else:
+                    st.info("📋 Dados insuficientes para análise de problemas por time")
             else:
-                st.info("📋 Dados insuficientes para análise de motivos por desenvolvedor (mínimo 2 rejeições por dev)")
+                st.info("📋 Nenhum dado disponível para análise")
             
             st.markdown("---")
             st.markdown("#### 📈 **Evolução de Taxa ao Longo do Tempo**")
@@ -1915,7 +2639,9 @@ def main():
                     st.markdown("#### 📋 **Dados Detalhados de Erros**")
                     if st.checkbox("Mostrar tabela de testes com erros", key="show_erros_table"):
                         # Filtrar apenas testes com erros > 0
-                        dados_com_erros = dados_erros[dados_erros['Erros'] > 0].sort_values('Erros', ascending=False)
+                        dados_temp = dados_erros.copy()
+                        dados_temp['Erros'] = pd.to_numeric(dados_temp['Erros'], errors='coerce').fillna(0)
+                        dados_com_erros = dados_temp[dados_temp['Erros'] > 0].sort_values('Erros', ascending=False)
                         if not dados_com_erros.empty:
                             st.dataframe(dados_com_erros, use_container_width=True)
                             st.caption(f"Exibindo {len(dados_com_erros)} testes que encontraram erros")
@@ -2193,6 +2919,298 @@ def main():
                    - 💡 Insights automáticos
                    - 🎯 Recomendações estratégicas
                 """)
+        
+        with tab8:
+            st.header("📊 Relatório Detalhado para P.M.")
+            st.markdown("### Análise Detalhada de Bugs e Falhas por Tarefa")
+            
+            # Filtros específicos para o relatório
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                times_disponiveis = ['Todos'] + sorted(df_com_teste['Time'].dropna().unique().tolist())
+                time_selecionado = st.selectbox("Filtrar por Time:", times_disponiveis, key="pm_time")
+            
+            with col2:
+                status_disponiveis = ['Todos'] + sorted(df_com_teste['Status'].dropna().unique().tolist())
+                status_selecionado = st.selectbox("Filtrar por Status:", status_disponiveis, key="pm_status")
+            
+            with col3:
+                periodo_dias = st.selectbox("Período:", [7, 15, 30, 60, 90, 'Todos'], index=2, key="pm_periodo")
+            
+            # Aplicar filtros
+            df_pm = df_com_teste.copy()
+            
+            if time_selecionado != 'Todos':
+                df_pm = df_pm[df_pm['Time'] == time_selecionado]
+            
+            if status_selecionado != 'Todos':
+                df_pm = df_pm[df_pm['Status'] == status_selecionado]
+            
+            if periodo_dias != 'Todos':
+                data_limite = datetime.now() - pd.Timedelta(days=periodo_dias)
+                df_pm = df_pm[df_pm['Data'] >= data_limite]
+            
+            # Separar dados por tipo de problema
+            df_rejeitadas = df_pm[df_pm['Status'] == 'REJEITADA'].copy()
+            df_temp = df_pm.copy()
+            df_temp['Erros'] = pd.to_numeric(df_temp['Erros'], errors='coerce').fillna(0)
+            df_com_erros = df_temp[df_temp['Erros'].notna() & (df_temp['Erros'] > 0)].copy()
+            
+            # Seção 1: Resumo Executivo
+            st.markdown("#### 📈 Resumo Executivo")
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                total_tasks = len(df_pm)
+                st.metric("Total de Tarefas", total_tasks)
+            
+            with col2:
+                total_rejeitadas = len(df_rejeitadas)
+                taxa_rejeicao = (total_rejeitadas / total_tasks * 100) if total_tasks > 0 else 0
+                st.metric("Tarefas Rejeitadas", total_rejeitadas, f"{taxa_rejeicao:.1f}%")
+            
+            with col3:
+                total_com_erros = len(df_com_erros)
+                st.metric("Tarefas com Erros", total_com_erros)
+            
+            with col4:
+                total_problemas = total_rejeitadas + total_com_erros
+                st.metric("Total de Problemas", total_problemas)
+            
+            st.divider()
+            
+            # Seção 2: Detalhamento de Tarefas Rejeitadas
+            if len(df_rejeitadas) > 0:
+                st.markdown("#### 🚫 Detalhamento de Tarefas Rejeitadas")
+                
+                # Criar tabela detalhada com descrição dos problemas
+                df_rejeitadas_detalhada = df_rejeitadas[['Data', 'Sprint', 'Time', 'Nome da Task', 'Link da Task', 
+                                                       'Responsável', 'Motivo', 'Motivo2', 'Motivo3', 'Responsavel pelo teste']].copy()
+                
+                # Criar coluna de descrição consolidada
+                def criar_descricao_problema(row):
+                    motivos = []
+                    if pd.notna(row['Motivo']) and row['Motivo'].strip():
+                        motivos.append(f"• {row['Motivo'].strip()}")
+                    if pd.notna(row['Motivo2']) and row['Motivo2'].strip():
+                        motivos.append(f"• {row['Motivo2'].strip()}")
+                    if pd.notna(row['Motivo3']) and row['Motivo3'].strip():
+                        motivos.append(f"• {row['Motivo3'].strip()}")
+                    
+                    if motivos:
+                        return "\n".join(motivos)
+                    else:
+                        return "Motivo não especificado"
+                
+                df_rejeitadas_detalhada['Descrição do Problema'] = df_rejeitadas_detalhada.apply(criar_descricao_problema, axis=1)
+                
+                # Reorganizar colunas para melhor visualização
+                colunas_exibir = ['Data', 'Sprint', 'Time', 'Nome da Task', 'Responsável', 
+                                'Descrição do Problema', 'Responsavel pelo teste', 'Link da Task']
+                
+                df_rejeitadas_exibir = df_rejeitadas_detalhada[colunas_exibir].copy()
+                df_rejeitadas_exibir['Data'] = df_rejeitadas_exibir['Data'].dt.strftime('%d/%m/%Y')
+                
+                st.dataframe(
+                    df_rejeitadas_exibir,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Link da Task": st.column_config.LinkColumn(
+                            "Link da Task",
+                            help="Clique para abrir a task",
+                            display_text="🔗 Abrir Task"
+                        ),
+                        "Descrição do Problema": st.column_config.TextColumn(
+                            "Descrição do Problema",
+                            help="Detalhes dos problemas encontrados",
+                            width="large"
+                        )
+                    }
+                )
+                
+                # Botão para exportar dados de rejeitadas
+                csv_rejeitadas = df_rejeitadas_exibir.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    label="📥 Exportar Tarefas Rejeitadas (CSV)",
+                    data=csv_rejeitadas,
+                    file_name=f"tarefas_rejeitadas_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv"
+                )
+            
+            st.divider()
+            
+            # Seção 3: Detalhamento de Tarefas com Erros
+            if len(df_com_erros) > 0:
+                st.markdown("#### ⚠️ Detalhamento de Tarefas com Erros")
+                
+                df_erros_detalhada = df_com_erros[['Data', 'Sprint', 'Time', 'Nome da Task', 'Link da Task', 
+                                                 'Responsável', 'Erros', 'Status', 'Responsavel pelo teste']].copy()
+                
+                # Criar descrição para erros
+                def criar_descricao_erro(row):
+                    num_erros = int(row['Erros']) if pd.notna(row['Erros']) else 0
+                    status = row['Status'] if pd.notna(row['Status']) else 'N/A'
+                    
+                    if num_erros == 1:
+                        return f"1 erro encontrado (Status: {status})"
+                    elif num_erros > 1:
+                        return f"{num_erros} erros encontrados (Status: {status})"
+                    else:
+                        return "Erro não quantificado"
+                
+                df_erros_detalhada['Descrição do Erro'] = df_erros_detalhada.apply(criar_descricao_erro, axis=1)
+                
+                colunas_erros = ['Data', 'Sprint', 'Time', 'Nome da Task', 'Responsável', 
+                               'Descrição do Erro', 'Responsavel pelo teste', 'Link da Task']
+                
+                df_erros_exibir = df_erros_detalhada[colunas_erros].copy()
+                df_erros_exibir['Data'] = df_erros_exibir['Data'].dt.strftime('%d/%m/%Y')
+                
+                st.dataframe(
+                    df_erros_exibir,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Link da Task": st.column_config.LinkColumn(
+                            "Link da Task",
+                            help="Clique para abrir a task",
+                            display_text="🔗 Abrir Task"
+                        ),
+                        "Descrição do Erro": st.column_config.TextColumn(
+                            "Descrição do Erro",
+                            help="Detalhes dos erros encontrados"
+                        )
+                    }
+                )
+                
+                # Botão para exportar dados de erros
+                csv_erros = df_erros_exibir.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    label="📥 Exportar Tarefas com Erros (CSV)",
+                    data=csv_erros,
+                    file_name=f"tarefas_com_erros_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv"
+                )
+            
+            st.divider()
+            
+            # Seção 4: Análise de Tendências
+            st.markdown("#### 📊 Análise de Tendências")
+            
+            if len(df_pm) > 0:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Gráfico de problemas por time
+                    problemas_por_time = df_pm.groupby('Time').agg({
+                        'Status': lambda x: (x == 'REJEITADA').sum(),
+                        'Erros': lambda x: (pd.to_numeric(x, errors='coerce').fillna(0) > 0).sum() if x.notna().any() else 0
+                    }).reset_index()
+                    problemas_por_time.columns = ['Time', 'Rejeitadas', 'Com_Erros']
+                    problemas_por_time['Total_Problemas'] = problemas_por_time['Rejeitadas'] + problemas_por_time['Com_Erros']
+                    
+                    if not problemas_por_time.empty and problemas_por_time['Total_Problemas'].sum() > 0:
+                        fig_time = px.bar(
+                            problemas_por_time.sort_values('Total_Problemas', ascending=True),
+                            x='Total_Problemas',
+                            y='Time',
+                            orientation='h',
+                            title="Problemas por Time",
+                            color='Total_Problemas',
+                            color_continuous_scale='Reds'
+                        )
+                        fig_time.update_layout(height=400)
+                        st.plotly_chart(fig_time, use_container_width=True)
+                    else:
+                        st.info("Nenhum problema encontrado para exibir no gráfico.")
+                
+                with col2:
+                    # Gráfico de evolução temporal
+                    if 'Data' in df_pm.columns:
+                        df_pm['Semana'] = df_pm['Data'].dt.to_period('W').astype(str)
+                        evolucao = df_pm.groupby('Semana').agg({
+                            'Status': lambda x: (x == 'REJEITADA').sum(),
+                            'Erros': lambda x: (pd.to_numeric(x, errors='coerce').fillna(0) > 0).sum() if x.notna().any() else 0
+                        }).reset_index()
+                        evolucao.columns = ['Semana', 'Rejeitadas', 'Com_Erros']
+                        
+                        if not evolucao.empty:
+                            fig_evolucao = go.Figure()
+                            fig_evolucao.add_trace(go.Scatter(
+                                x=evolucao['Semana'],
+                                y=evolucao['Rejeitadas'],
+                                mode='lines+markers',
+                                name='Rejeitadas',
+                                line=dict(color='red')
+                            ))
+                            fig_evolucao.add_trace(go.Scatter(
+                                x=evolucao['Semana'],
+                                y=evolucao['Com_Erros'],
+                                mode='lines+markers',
+                                name='Com Erros',
+                                line=dict(color='orange')
+                            ))
+                            fig_evolucao.update_layout(
+                                title="Evolução de Problemas por Semana",
+                                xaxis_title="Semana",
+                                yaxis_title="Quantidade",
+                                height=400
+                            )
+                            st.plotly_chart(fig_evolucao, use_container_width=True)
+                        else:
+                            st.info("Dados insuficientes para análise temporal.")
+            
+            # Seção 5: Recomendações
+            st.markdown("#### 💡 Recomendações para P.M.")
+            
+            if len(df_pm) > 0:
+                recomendacoes = []
+                
+                # Análise de taxa de rejeição
+                if taxa_rejeicao > 20:
+                    recomendacoes.append(f"🔴 **Alta taxa de rejeição ({taxa_rejeicao:.1f}%)**: Revisar processo de desenvolvimento e critérios de aceitação")
+                elif taxa_rejeicao > 10:
+                    recomendacoes.append(f"🟡 **Taxa de rejeição moderada ({taxa_rejeicao:.1f}%)**: Monitorar tendência e identificar padrões")
+                else:
+                    recomendacoes.append(f"🟢 **Taxa de rejeição baixa ({taxa_rejeicao:.1f}%)**: Manter qualidade atual")
+                
+                # Análise por time
+                if len(df_rejeitadas) > 0:
+                    time_mais_problemas = df_rejeitadas['Time'].value_counts().index[0]
+                    qtd_problemas = df_rejeitadas['Time'].value_counts().iloc[0]
+                    recomendacoes.append(f"⚠️ **Time {time_mais_problemas}** apresenta mais problemas ({qtd_problemas} tarefas rejeitadas)")
+                
+                # Análise de motivos mais comuns
+                if len(df_rejeitadas) > 0:
+                    motivos_todos = []
+                    for col in ['Motivo', 'Motivo2', 'Motivo3']:
+                        motivos_todos.extend(df_rejeitadas[col].dropna().tolist())
+                    
+                    if motivos_todos:
+                        motivo_mais_comum = pd.Series(motivos_todos).value_counts().index[0]
+                        recomendacoes.append(f"🎯 **Motivo mais comum**: {motivo_mais_comum}")
+                
+                for rec in recomendacoes:
+                    st.markdown(rec)
+            else:
+                st.info("Nenhum dado disponível para análise com os filtros selecionados.")
+            
+            st.markdown("""
+            ---
+            **💼 Sobre este Relatório:**
+            
+            Este relatório foi desenvolvido especificamente para fornecer à P.M. uma visão detalhada dos problemas encontrados nas tarefas, 
+            incluindo descrições específicas dos bugs e falhas. Os dados podem ser exportados em CSV para análises adicionais ou 
+            apresentações executivas.
+            
+            **📋 Como usar:**
+            1. Use os filtros no topo para focar em times, períodos ou status específicos
+            2. Analise as tabelas detalhadas para entender os problemas específicos
+            3. Exporte os dados em CSV para análises offline
+            4. Use as tendências e recomendações para tomada de decisão
+            """)
     else:
         st.info("👆 Faça upload de um arquivo Excel para começar a análise")
         st.markdown("""
