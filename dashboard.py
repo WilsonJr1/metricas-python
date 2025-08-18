@@ -2997,7 +2997,13 @@ def main():
             
             with col1:
                 total_tasks = len(df_pm)
-                st.metric("Total de Tarefas", total_tasks)
+                tarefas_unicas = df_pm['Nome da Task'].nunique() if 'Nome da Task' in df_pm.columns else 0
+                st.metric(
+                    "📋 Total de Tarefas", 
+                    f"{tarefas_unicas}",
+                    delta=f"📊 {total_tasks} testes realizados",
+                    help=f"Tarefas únicas testadas: {tarefas_unicas} | Total de testes efetuados: {total_tasks}"
+                )
             
             with col2:
                 total_rejeitadas = len(df_rejeitadas)
