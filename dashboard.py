@@ -602,7 +602,13 @@ def grafico_evolucao_bugs(df_bugs):
 
 def grafico_status_distribuicao(df_filtrado):
     if 'Status' in df_filtrado.columns:
-        status_counts = df_filtrado['Status'].value_counts()
+        # Filtrar registros com Status não vazio
+        df_status_valido = df_filtrado[df_filtrado['Status'].notna() & (df_filtrado['Status'].str.strip() != '')]
+        
+        if df_status_valido.empty:
+            return None
+            
+        status_counts = df_status_valido['Status'].value_counts()
         fig = px.pie(
             values=status_counts.values, 
             names=status_counts.index,
