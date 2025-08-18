@@ -1064,37 +1064,37 @@ def grafico_motivos_por_time(df_filtrado):
         time = row.get('Time', 'N/A')
         for col in motivos_existentes:
             motivo = row.get(col)
-            if pd.notna(motivo) and motivo.lower() not in ['aprovada', 'sem recusa', '']:
-                dados_motivos.append({'Time': time, 'Motivo': motivo})
+            if pd.notna(motivo) and motivo.lower() not in ['aprovada', 'sem recusa', ''] and str(motivo).strip() != '':
+                dados_motivos.append({'Time': time})
     
     if not dados_motivos:
         return None
     
     df_motivos = pd.DataFrame(dados_motivos)
-    motivos_por_time = df_motivos.groupby(['Time', 'Motivo']).size().reset_index(name='Quantidade')
+    total_por_time = df_motivos['Time'].value_counts().sort_values(ascending=False)
     
-    if motivos_por_time.empty:
+    if total_por_time.empty:
         return None
     
     fig = px.bar(
-        motivos_por_time,
-        x='Time',
-        y='Quantidade',
-        color='Motivo',
-        title='🎯 Motivos de Rejeição por Time',
-        text='Quantidade',
-        color_discrete_sequence=px.colors.qualitative.Set3
+        x=total_por_time.index,
+        y=total_por_time.values,
+        title='🎯 Total de Motivos de Rejeição por Time',
+        labels={'x': 'Time', 'y': 'Total de Motivos'},
+        text=total_por_time.values,
+        color=total_por_time.values,
+        color_continuous_scale=['#4ECDC4', '#45B7D1', '#FF6B6B']
     )
     
-    fig.update_traces(textposition='outside')
+    fig.update_traces(textposition='outside', textfont_size=12)
     fig.update_layout(
         title_font_color='#FFFFFF',
-        xaxis_title='Time',
-        yaxis_title='Quantidade de Ocorrências',
-        legend_title='Motivos',
-        margin=dict(t=60, b=80, l=80, r=80),
+        xaxis_title='Time de Desenvolvimento',
+        yaxis_title='Total de Motivos de Rejeição',
+        margin=dict(t=60, b=120, l=80, r=80),
         height=500,
-        showlegend=True
+        showlegend=False,
+        xaxis_tickangle=45
     )
     
     return fig
@@ -1118,31 +1118,37 @@ def grafico_motivos_por_desenvolvedor(df_filtrado):
         dev = row.get('Responsável', 'N/A')
         for col in motivos_existentes:
             motivo = row.get(col)
-            if pd.notna(motivo) and motivo.lower() not in ['aprovada', 'sem recusa', '']:
-                dados_motivos.append({'Desenvolvedor': dev, 'Motivo': motivo})
+            if pd.notna(motivo) and motivo.lower() not in ['aprovada', 'sem recusa', ''] and str(motivo).strip() != '':
+                dados_motivos.append({'Desenvolvedor': dev})
     
     if not dados_motivos:
         return None
     
     df_motivos = pd.DataFrame(dados_motivos)
-    motivos_por_dev = df_motivos.groupby(['Desenvolvedor', 'Motivo']).size().reset_index(name='Quantidade')
+    total_por_dev = df_motivos['Desenvolvedor'].value_counts().sort_values(ascending=False).head(10)
     
-    if motivos_por_dev.empty:
+    if total_por_dev.empty:
         return None
     
-    fig = px.sunburst(
-        motivos_por_dev,
-        path=['Desenvolvedor', 'Motivo'],
-        values='Quantidade',
-        title='👨‍💻 Motivos de Rejeição por Desenvolvedor',
-        color='Quantidade',
-        color_continuous_scale='Reds'
+    fig = px.bar(
+        x=total_por_dev.index,
+        y=total_por_dev.values,
+        title='👨‍💻 Total de Motivos de Rejeição por Desenvolvedor (Top 10)',
+        labels={'x': 'Desenvolvedor', 'y': 'Total de Motivos'},
+        text=total_por_dev.values,
+        color=total_por_dev.values,
+        color_continuous_scale=['#4ECDC4', '#45B7D1', '#FF6B6B']
     )
     
+    fig.update_traces(textposition='outside', textfont_size=12)
     fig.update_layout(
         title_font_color='#FFFFFF',
-        margin=dict(t=60, b=80, l=80, r=80),
-        height=500
+        xaxis_title='Desenvolvedor',
+        yaxis_title='Total de Motivos de Rejeição',
+        margin=dict(t=60, b=150, l=80, r=80),
+        height=500,
+        showlegend=False,
+        xaxis_tickangle=45
     )
     
     return fig
@@ -1487,7 +1493,7 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
                 
                 if todos_motivos:
                     motivos_filtrados = [motivo for motivo in todos_motivos 
-                                       if motivo.lower() not in ['aprovada', 'sem recusa']]
+                                       if motivo.lower() not in ['aprovada', 'sem recusa'] and str(motivo).strip() != '']
                     
                     if motivos_filtrados:
                         motivo_mais_comum = pd.Series(motivos_filtrados).value_counts().index[0]
@@ -1499,6 +1505,34 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
                             delta_color="inverse",
                             help=f"Defeito mais frequente: '{motivo_mais_comum}' com {ocorrencias_motivo} ocorrências - oportunidade de melhoria no processo de desenvolvimento"
                         )
+                    else:
+                        st.metric(
+                            "🔍 Principal Tipo de Defeito", 
+                            "Nenhum defeito",
+                            delta="📊 Sem motivos válidos no período",
+                            help="Não foram encontrados motivos de defeito válidos no período filtrado"
+                        )
+                else:
+                    st.metric(
+                        "🔍 Principal Tipo de Defeito", 
+                        "Sem dados",
+                        delta="📊 Motivos não preenchidos",
+                        help="As colunas de motivos estão vazias para as tarefas rejeitadas"
+                    )
+            else:
+                st.metric(
+                    "🔍 Principal Tipo de Defeito", 
+                    "Colunas ausentes",
+                    delta="📊 Motivo, Motivo2, Motivo3 não encontradas",
+                    help="As colunas de motivos não foram encontradas nos dados"
+                )
+        else:
+            st.metric(
+                "🔍 Principal Tipo de Defeito", 
+                "Sem rejeições",
+                delta="📊 Nenhuma tarefa rejeitada no período",
+                help="Não há tarefas com status REJEITADA no período filtrado"
+            )
     
     with col11:
         taxa_sem_teste = (total_sem_teste / total_planilha * 100) if total_planilha > 0 else 0
