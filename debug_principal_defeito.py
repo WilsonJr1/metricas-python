@@ -20,7 +20,7 @@ try:
     print(f"\nTotal de tarefas rejeitadas: {len(df_rejeitadas)}")
     
     if not df_rejeitadas.empty:
-        motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+        motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
         motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
         print(f"\nColunas de motivos encontradas: {motivos_existentes}")
         

@@ -50,7 +50,7 @@ try:
             
             if not df_rejeitadas_final.empty:
                 print("\n=== Calculando Principal Defeito com Filtros ===")
-                motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+                motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
                 todos_motivos = []
                 
                 for col in motivos_cols:

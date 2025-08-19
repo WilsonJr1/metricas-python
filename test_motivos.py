@@ -6,7 +6,7 @@ if df is not None:
     df_rejeitadas = df[df['Status'] == 'REJEITADA']
     print(f'Total rejeitadas: {len(df_rejeitadas)}')
     
-    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
     todos_motivos = []
     
     for col in motivos_cols:

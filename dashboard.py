@@ -8,6 +8,19 @@ from datetime import datetime
 import json
 from pathlib import Path
 import os
+import io
+import base64
+from datetime import date
+
+try:
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
 
 # Importar módulo de sustentação
 try:
@@ -30,6 +43,816 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+def exportar_grafico_para_pdf(fig, titulo, largura=800, altura=600):
+    """
+    Converte um gráfico Plotly para imagem e retorna os dados da imagem
+    """
+    if fig is None:
+        print(f"Aviso: Gráfico '{titulo}' é None")
+        return None
+    
+    try:
+        # Verificar se o objeto fig tem o método to_image
+        if not hasattr(fig, 'to_image'):
+            print(f"Erro: Objeto '{titulo}' não é um gráfico Plotly válido")
+            return None
+        
+        # Configurar tema com fundo branco para PDF
+        fig.update_layout(
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            font=dict(color='black'),
+            title_font_color='black'
+        )
+        
+        # Atualizar eixos para garantir que sejam visíveis
+        fig.update_xaxes(gridcolor='lightgray', linecolor='black', tickcolor='black')
+        fig.update_yaxes(gridcolor='lightgray', linecolor='black', tickcolor='black')
+            
+        # Tentar converter para imagem
+        img_bytes = fig.to_image(
+            format="png", 
+            width=largura, 
+            height=altura,
+            engine="kaleido"
+        )
+        
+        if img_bytes is None or len(img_bytes) == 0:
+            print(f"Erro: Imagem vazia gerada para '{titulo}'")
+            return None
+            
+        return img_bytes
+        
+    except ImportError as e:
+        print(f"Erro de dependência para '{titulo}': {e}. Instale: pip install kaleido")
+        return None
+    except Exception as e:
+        print(f"Erro ao converter gráfico '{titulo}': {e}")
+        return None
+
+def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
+    """
+    Cria um PDF completo e detalhado do relatório PM com insights e análises
+    """
+    if not PDF_AVAILABLE:
+        st.error("📄 Bibliotecas PDF não disponíveis. Instale: pip install reportlab kaleido")
+        return None
+    
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=A4, 
+        topMargin=0.7*inch, 
+        bottomMargin=0.7*inch,
+        leftMargin=0.7*inch,
+        rightMargin=0.7*inch
+    )
+    styles = getSampleStyleSheet()
+    story = []
+    
+    # Definir paleta de cores profissional
+    cor_primaria = colors.Color(0.0, 0.5, 0.0)  # Verde Delfinance
+    cor_secundaria = colors.Color(0.2, 0.6, 0.2)  # Verde médio
+    cor_destaque = colors.Color(0.8, 0.2, 0.2)  # Vermelho
+    cor_sucesso = colors.Color(0.2, 0.6, 0.3)  # Verde
+    cor_fundo = colors.Color(0.95, 0.95, 0.95)  # Cinza claro
+    
+    # Estilos customizados profissionais
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=28,
+        spaceAfter=40,
+        spaceBefore=20,
+        alignment=1,
+        textColor=cor_primaria,
+        fontName='Times-Bold'
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'CustomSubtitle',
+        parent=styles['Heading2'],
+        fontSize=18,
+        spaceAfter=20,
+        spaceBefore=25,
+        textColor=cor_secundaria,
+        fontName='Times-Bold',
+        borderWidth=1,
+        borderColor=cor_secundaria,
+        borderPadding=8
+    )
+    
+    insight_style_positivo = ParagraphStyle(
+        'InsightStylePositivo',
+        parent=styles['Normal'],
+        fontSize=11,
+        spaceAfter=12,
+        leftIndent=25,
+        rightIndent=10,
+        textColor=cor_sucesso,
+        fontName='Times-Roman',
+        backColor=cor_fundo,
+        borderWidth=0.5,
+        borderColor=cor_sucesso,
+        borderPadding=6
+    )
+    
+    insight_style_neutro = ParagraphStyle(
+        'InsightStyleNeutro',
+        parent=styles['Normal'],
+        fontSize=11,
+        spaceAfter=12,
+        leftIndent=25,
+        rightIndent=10,
+        textColor=cor_secundaria,
+        fontName='Times-Roman',
+        backColor=cor_fundo,
+        borderWidth=0.5,
+        borderColor=cor_secundaria,
+        borderPadding=6
+    )
+    
+    insight_style_negativo = ParagraphStyle(
+        'InsightStyleNegativo',
+        parent=styles['Normal'],
+        fontSize=11,
+        spaceAfter=12,
+        leftIndent=25,
+        rightIndent=10,
+        textColor=cor_destaque,
+        fontName='Times-Roman',
+        backColor=cor_fundo,
+        borderWidth=0.5,
+        borderColor=cor_destaque,
+        borderPadding=6
+    )
+    
+    normal_enhanced = ParagraphStyle(
+        'NormalEnhanced',
+        parent=styles['Normal'],
+        fontSize=12,
+        spaceAfter=10,
+        textColor=colors.black,
+        fontName='Times-Roman',
+        alignment=0
+    )
+    
+    chart_title_style = ParagraphStyle(
+        'ChartTitle',
+        parent=styles['Heading3'],
+        fontSize=14,
+        spaceAfter=8,
+        spaceBefore=5,
+        textColor=cor_secundaria,
+        fontName='Times-Bold',
+        alignment=0
+    )
+    
+    header_style = ParagraphStyle(
+        'HeaderStyle',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=cor_secundaria,
+        fontName='Times-Italic',
+        alignment=1
+    )
+    
+    # Cabeçalho do relatório com design profissional e logo
+    from reportlab.platypus import HRFlowable
+    from reportlab.graphics.shapes import Drawing, Rect, Polygon
+    from reportlab.graphics import renderPDF
+    
+    # Criar logo da Delfinance usando apenas texto
+    from reportlab.platypus import Paragraph
+    logo_text = Paragraph("<font color='#00C851' size='16'><b>delfinance</b></font>", styles['Normal'])
+    
+    # Criar tabela para cabeçalho com logo e título
+    header_content = [[
+        logo_text,
+        Paragraph("📊 RELATÓRIO EXECUTIVO DE QUALIDADE", title_style)
+    ]]
+    
+    header_logo_table = Table(header_content, colWidths=[1.5*inch, 5.5*inch])
+    header_logo_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    
+    story.append(header_logo_table)
+    story.append(Spacer(1, 10))
+    
+    # Linha decorativa
+    story.append(HRFlowable(width="100%", thickness=2, color=cor_primaria))
+    story.append(Spacer(1, 15))
+    
+    # Calcular período baseado nos dados filtrados
+    if len(df_filtrado) > 0 and 'Data' in df_filtrado.columns:
+        try:
+            # Converter coluna Data para datetime se necessário
+            df_temp = df_filtrado.copy()
+            if not pd.api.types.is_datetime64_any_dtype(df_temp['Data']):
+                df_temp['Data'] = pd.to_datetime(df_temp['Data'], dayfirst=True, errors='coerce')
+            
+            # Obter datas mínima e máxima dos dados filtrados
+            data_min = df_temp['Data'].min()
+            data_max = df_temp['Data'].max()
+            
+            if pd.notna(data_min) and pd.notna(data_max):
+                if data_min.date() == data_max.date():
+                    periodo_analise = data_min.strftime('%d/%m/%Y')
+                else:
+                    periodo_analise = f"{data_min.strftime('%d/%m/%Y')} a {data_max.strftime('%d/%m/%Y')}"
+            else:
+                periodo_analise = date.today().strftime('%d/%m/%Y')
+        except Exception:
+            periodo_analise = date.today().strftime('%d/%m/%Y')
+    else:
+        periodo_analise = date.today().strftime('%d/%m/%Y')
+    
+    # Informações do cabeçalho simplificado
+    header_data = [
+        ['Período de Análise:', periodo_analise]
+    ]
+    
+    header_table = Table(header_data, colWidths=[2.5*inch, 3.5*inch])
+    header_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (0, 0), 'Times-Bold'),
+        ('FONTNAME', (1, 0), (1, 0), 'Times-Roman'),
+        ('FONTSIZE', (0, 0), (-1, -1), 12),
+        ('TEXTCOLOR', (0, 0), (0, 0), cor_secundaria),
+        ('TEXTCOLOR', (1, 0), (1, 0), colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8)
+    ]))
+    
+    story.append(header_table)
+    story.append(Spacer(1, 30))
+    
+    # Calcular métricas detalhadas
+    total_tasks = len(df_filtrado)
+    tasks_unicas = df_filtrado['Nome da Task'].nunique() if 'Nome da Task' in df_filtrado.columns else 0
+    aprovadas = len(df_filtrado[df_filtrado['Status'] == 'APROVADA']) if 'Status' in df_filtrado.columns else 0
+    prontas = len(df_filtrado[df_filtrado['Status'] == 'PRONTO PARA PUBLICAÇÃO']) if 'Status' in df_filtrado.columns else 0
+    total_aprovadas = aprovadas + prontas
+    rejeitadas = len(df_filtrado[df_filtrado['Status'] == 'REJEITADA']) if 'Status' in df_filtrado.columns else 0
+    em_andamento = len(df_filtrado[df_filtrado['Status'].isin(['EM ANDAMENTO', 'PENDENTE'])]) if 'Status' in df_filtrado.columns else 0
+    taxa_aprovacao = (total_aprovadas/(total_aprovadas + rejeitadas)*100) if (total_aprovadas + rejeitadas) > 0 else 0
+    taxa_rejeicao = (rejeitadas/total_tasks*100) if total_tasks > 0 else 0
+    
+    # Times únicos
+    times_unicos = df_filtrado['Time'].nunique() if 'Time' in df_filtrado.columns else 0
+    testadores_unicos = df_filtrado['Responsavel pelo teste'].nunique() if 'Responsavel pelo teste' in df_filtrado.columns else 0
+    
+    # 1. RESUMO EXECUTIVO
+    story.append(Paragraph("1. RESUMO EXECUTIVO", subtitle_style))
+    
+    resumo_texto = f"""
+    Este relatório apresenta uma análise abrangente da qualidade dos testes realizados no período, 
+    abrangendo {total_tasks} testes executados em {tasks_unicas} tarefas únicas, distribuídas entre 
+    {times_unicos} times de desenvolvimento e executadas por {testadores_unicos} testadores.
+    
+    A taxa de aprovação atual é de {taxa_aprovacao:.1f}%, indicando {'um excelente' if taxa_aprovacao >= 80 else 'um bom' if taxa_aprovacao >= 60 else 'um nível que requer atenção'} 
+    nível de qualidade nas entregas.
+    """
+    story.append(Paragraph(resumo_texto, styles['Normal']))
+    story.append(Spacer(1, 20))
+    
+    # Tabela de métricas principais com design profissional
+    metricas_data = [
+        ['MÉTRICA', 'VALOR', 'INDICADOR', 'TENDÊNCIA'],
+        ['Total de Tarefas Únicas', f'{tasks_unicas}', '📊', 'Estável'],
+        ['Total de Testes Realizados', f'{total_tasks}', '🔍', 'Crescente'],
+        ['Tarefas Aprovadas', f'{aprovadas}', '✅', 'Positiva'],
+        ['Tarefas Rejeitadas', f'{rejeitadas}', '❌', 'Controlada'],
+        ['Em Andamento/Pendente', f'{em_andamento}', '⏳', 'Monitorar'],
+        ['Taxa de Aprovação', f'{taxa_aprovacao:.1f}%', '📈', 'Excelente' if taxa_aprovacao >= 80 else 'Boa' if taxa_aprovacao >= 60 else 'Crítica'],
+        ['Taxa de Rejeição', f'{taxa_rejeicao:.1f}%', '📉', 'Baixa' if taxa_rejeicao <= 20 else 'Alta'],
+        ['Times Envolvidos', f'{times_unicos}', '👥', 'Engajados'],
+        ['Testadores Ativos', f'{testadores_unicos}', '🧪', 'Produtivos']
+    ]
+    
+    metricas_table = Table(metricas_data, colWidths=[2.2*inch, 1.0*inch, 0.8*inch, 1.5*inch])
+    metricas_table.setStyle(TableStyle([
+        # Cabeçalho com design profissional
+        ('BACKGROUND', (0, 0), (-1, 0), cor_primaria),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Times-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 15),
+        ('TOPPADDING', (0, 0), (-1, 0), 15),
+        
+        # Corpo da tabela
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('FONTNAME', (0, 1), (-1, -1), 'Times-Roman'),
+        ('FONTSIZE', (0, 1), (-1, -1), 11),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, cor_fundo]),
+        
+        # Bordas e separadores
+        ('GRID', (0, 0), (-1, -1), 0.5, cor_secundaria),
+        ('LINEBELOW', (0, 0), (-1, 0), 2, cor_primaria),
+        ('LINEBEFORE', (1, 0), (1, -1), 1, cor_secundaria),
+        ('LINEBEFORE', (2, 0), (2, -1), 1, cor_secundaria),
+        ('LINEBEFORE', (3, 0), (3, -1), 1, cor_secundaria),
+        
+        # Padding e alinhamento
+        ('TOPPADDING', (0, 1), (-1, -1), 12),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 12),
+        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+        ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')
+    ]))
+    
+    story.append(metricas_table)
+    story.append(Spacer(1, 30))
+    
+    # 2. INSIGHTS E ANÁLISES CRÍTICAS
+    story.append(Paragraph("2. INSIGHTS E ANÁLISES CRÍTICAS", subtitle_style))
+    
+    # Análise da taxa de aprovação
+    if taxa_aprovacao >= 80:
+        insight_aprovacao = "✅ EXCELENTE: Taxa de aprovação acima de 80% indica alta qualidade nas entregas."
+        story.append(Paragraph(insight_aprovacao, insight_style_positivo))
+    elif taxa_aprovacao >= 60:
+        insight_aprovacao = "⚠️ BOM: Taxa de aprovação entre 60-80% é aceitável, mas há espaço para melhorias."
+        story.append(Paragraph(insight_aprovacao, insight_style_neutro))
+    else:
+        insight_aprovacao = "🚨 CRÍTICO: Taxa de aprovação abaixo de 60% requer ação imediata."
+        story.append(Paragraph(insight_aprovacao, insight_style_negativo))
+    
+    # Análise de distribuição de trabalho
+    if 'Time' in df_filtrado.columns:
+        time_mais_ativo = df_filtrado['Time'].value_counts().index[0] if len(df_filtrado) > 0 else 'N/A'
+        tasks_time_ativo = df_filtrado['Time'].value_counts().iloc[0] if len(df_filtrado) > 0 else 0
+        story.append(Paragraph(f"📊 DISTRIBUIÇÃO: Time '{time_mais_ativo}' é o mais ativo com {tasks_time_ativo} testes realizados.", insight_style_positivo))
+    
+    # Análise de testadores
+    if 'Responsavel pelo teste' in df_filtrado.columns:
+        testador_mais_ativo = df_filtrado['Responsavel pelo teste'].value_counts().index[0] if len(df_filtrado) > 0 else 'N/A'
+        tests_testador = df_filtrado['Responsavel pelo teste'].value_counts().iloc[0] if len(df_filtrado) > 0 else 0
+        story.append(Paragraph(f"🧪 PERFORMANCE: Testador '{testador_mais_ativo}' realizou {tests_testador} testes, sendo o mais produtivo.", insight_style_positivo))
+    
+    story.append(Spacer(1, 20))
+    
+    # 3. ANÁLISE DETALHADA POR TIMES
+    story.append(Paragraph("3. ANÁLISE DETALHADA POR TIMES", subtitle_style))
+    
+    if 'Time' in df_filtrado.columns and 'Status' in df_filtrado.columns:
+        times_performance = df_filtrado.groupby('Time')['Status'].value_counts().unstack(fill_value=0)
+        if 'APROVADA' in times_performance.columns or 'REJEITADA' in times_performance.columns or 'PRONTO PARA PUBLICAÇÃO' in times_performance.columns:
+            aprovadas_total = times_performance.get('APROVADA', 0) + times_performance.get('PRONTO PARA PUBLICAÇÃO', 0)
+            rejeitadas_total = times_performance.get('REJEITADA', 0)
+            total_testadas = aprovadas_total + rejeitadas_total
+            times_performance['Taxa_Aprovacao'] = (aprovadas_total / total_testadas * 100).round(1).fillna(0)
+            
+            performance_data = [['TIME', 'APROVADAS', 'REJEITADAS', 'TAXA APROVAÇÃO']]
+            for time in times_performance.index:
+                aprovadas_time = times_performance.loc[time, 'APROVADA'] if 'APROVADA' in times_performance.columns else 0
+                prontas_time = times_performance.loc[time, 'PRONTO PARA PUBLICAÇÃO'] if 'PRONTO PARA PUBLICAÇÃO' in times_performance.columns else 0
+                total_aprovadas_time = aprovadas_time + prontas_time
+                rejeitadas_time = times_performance.loc[time, 'REJEITADA'] if 'REJEITADA' in times_performance.columns else 0
+                taxa_time = times_performance.loc[time, 'Taxa_Aprovacao'] if 'Taxa_Aprovacao' in times_performance.columns else 0
+                performance_data.append([time, str(total_aprovadas_time), str(rejeitadas_time), f'{taxa_time}%'])
+            
+            performance_table = Table(performance_data)
+            performance_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Times-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.lightgrey),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            
+            story.append(performance_table)
+    
+    story.append(Spacer(1, 30))
+    
+    # 4. GRÁFICOS E VISUALIZAÇÕES
+    story.append(Paragraph("4. GRÁFICOS E VISUALIZAÇÕES", subtitle_style))
+    
+    # Gráfico de status
+    try:
+        fig_status = grafico_status_distribuicao(df_filtrado)
+        if fig_status:
+            img_bytes = exportar_grafico_para_pdf(fig_status, "Status dos Testes")
+            if img_bytes:
+                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+                story.append(Paragraph("Distribuição por Status", chart_title_style))
+                story.append(img)
+                story.append(Spacer(1, 15))
+    except Exception as e:
+        story.append(Paragraph(f"Erro ao gerar gráfico de status: {e}", styles['Normal']))
+
+    # Gráfico de tarefas por time
+    try:
+        fig_time = grafico_tasks_por_time(df_filtrado)
+        if fig_time:
+            img_bytes = exportar_grafico_para_pdf(fig_time, "Tarefas por Time")
+            if img_bytes:
+                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+                story.append(Paragraph("Tarefas por Time", chart_title_style))
+                story.append(img)
+                story.append(Spacer(1, 15))
+    except Exception as e:
+        story.append(Paragraph(f"Erro ao gerar gráfico por time: {e}", styles['Normal']))
+    
+    # Gráfico de evolução da qualidade
+    try:
+        fig_evolucao = grafico_evolucao_qualidade(df_filtrado, por_ambiente=False)
+        if fig_evolucao:
+            img_bytes = exportar_grafico_para_pdf(fig_evolucao, "Evolução da Qualidade")
+            if img_bytes:
+                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+                story.append(Paragraph("Evolução da Qualidade ao Longo do Tempo", chart_title_style))
+                story.append(img)
+                story.append(Spacer(1, 15))
+    except Exception as e:
+        story.append(Paragraph(f"Erro ao gerar gráfico de evolução: {e}", styles['Normal']))
+    
+    # Gráfico de motivos de rejeição
+    try:
+        fig_motivos = grafico_motivos_rejeicao(df_filtrado, por_ambiente=False)
+        if fig_motivos:
+            img_bytes = exportar_grafico_para_pdf(fig_motivos, "Motivos de Rejeição")
+            if img_bytes:
+                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+                story.append(Paragraph("Principais Motivos de Rejeição", chart_title_style))
+                story.append(img)
+                story.append(Spacer(1, 15))
+    except Exception as e:
+        story.append(Paragraph(f"Erro ao gerar gráfico de motivos: {e}", styles['Normal']))
+    
+    # Gráfico de timeline de tarefas
+    try:
+        fig_timeline = grafico_timeline_tasks(df_filtrado)
+        if fig_timeline:
+            img_bytes = exportar_grafico_para_pdf(fig_timeline, "Timeline de Tarefas")
+            if img_bytes:
+                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+                story.append(Paragraph("Timeline de Execução das Tarefas", styles['Heading3']))
+                story.append(img)
+                story.append(Spacer(1, 20))
+    except Exception as e:
+        story.append(Paragraph(f"Erro ao gerar timeline: {e}", styles['Normal']))
+    
+    # Gráfico comparativo de testadores
+    try:
+        fig_testadores = grafico_comparativo_testadores(df_filtrado)
+        if fig_testadores:
+            img_bytes = exportar_grafico_para_pdf(fig_testadores, "Comparativo de Testadores")
+            if img_bytes:
+                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+                story.append(Paragraph("Performance Comparativa dos Testadores", styles['Heading3']))
+                story.append(img)
+                story.append(Spacer(1, 20))
+    except Exception as e:
+        story.append(Paragraph(f"Erro ao gerar comparativo de testadores: {e}", styles['Normal']))
+    
+    # Gráfico de ranking de problemas
+    try:
+        fig_ranking = grafico_ranking_problemas(df_filtrado)
+        if fig_ranking:
+            img_bytes = exportar_grafico_para_pdf(fig_ranking, "Ranking de Problemas")
+            if img_bytes:
+                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+                story.append(Paragraph("Ranking dos Principais Problemas", styles['Heading3']))
+                story.append(img)
+                story.append(Spacer(1, 20))
+    except Exception as e:
+        story.append(Paragraph(f"Erro ao gerar ranking de problemas: {e}", styles['Normal']))
+    
+    # Gráfico de taxa de rejeição por time
+    try:
+        fig_taxa_rejeicao = grafico_taxa_rejeicao_por_time(df_filtrado)
+        if fig_taxa_rejeicao:
+            img_bytes = exportar_grafico_para_pdf(fig_taxa_rejeicao, "Taxa de Rejeição por Time")
+            if img_bytes:
+                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+                story.append(Paragraph("Taxa de Rejeição por Time de Desenvolvimento", styles['Heading3']))
+                story.append(img)
+                story.append(Spacer(1, 20))
+    except Exception as e:
+        story.append(Paragraph(f"Erro ao gerar taxa de rejeição por time: {e}", styles['Normal']))
+    
+    story.append(Spacer(1, 30))
+    
+
+    
+
+    
+    # 6. TAREFAS ENTREGUES E PRODUÇÃO
+    story.append(Paragraph("5. TAREFAS ENTREGUES E PRODUÇÃO", subtitle_style))
+    
+    # Filtrar tarefas aprovadas
+    df_aprovadas = df_filtrado[df_filtrado['Status'] == 'APROVADA'].copy()
+    
+    if len(df_aprovadas) > 0:
+        story.append(Paragraph(f"Total de tarefas entregues em produção: {len(df_aprovadas)}", insight_style_positivo))
+        
+        # Criar tabela de tarefas aprovadas
+        aprovadas_data = [['NOME DA TASK', 'DESCRIÇÃO']]
+        
+        for _, row in df_aprovadas.head(20).iterrows():  # Limitar a 20 registros para não sobrecarregar o PDF
+            nome_task = str(row.get('Nome da Task', 'N/A'))[:60]
+            descricao = str(row.get('Descrição', 'N/A'))[:80]
+            
+            aprovadas_data.append([nome_task, descricao])
+        
+        aprovadas_table = Table(aprovadas_data, colWidths=[4.5*inch, 2.5*inch])
+        aprovadas_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Times-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, cor_fundo]),
+            ('GRID', (0, 0), (-1, -1), 0.5, cor_secundaria),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4)
+        ]))
+        
+        story.append(aprovadas_table)
+        
+        if len(df_aprovadas) > 20:
+            story.append(Paragraph(f"... e mais {len(df_aprovadas) - 20} tarefas entregues.", styles['Normal']))
+    else:
+        story.append(Paragraph("Nenhuma tarefa aprovada encontrada no período.", insight_style_neutro))
+    
+    story.append(Spacer(1, 20))
+    
+    # 7. TAREFAS PRONTAS PARA PUBLICAÇÃO
+    story.append(Paragraph("6. TAREFAS PRONTAS PARA PUBLICAÇÃO", subtitle_style))
+    
+    # Filtrar tarefas prontas para publicação
+    df_prontas = df_filtrado[df_filtrado['Status'] == 'PRONTO PARA PUBLICAÇÃO'].copy()
+    
+    if len(df_prontas) > 0:
+        story.append(Paragraph(f"Total de tarefas prontas para publicação: {len(df_prontas)}", insight_style_positivo))
+        
+        # Criar tabela de tarefas prontas
+        prontas_data = [['NOME DA TASK', 'DESCRIÇÃO']]
+        
+        for _, row in df_prontas.head(20).iterrows():  # Limitar a 20 registros
+            nome_task = str(row.get('Nome da Task', 'N/A'))[:60]
+            descricao = str(row.get('Descrição', 'N/A'))[:80]
+            
+            prontas_data.append([nome_task, descricao])
+        
+        prontas_table = Table(prontas_data, colWidths=[4.5*inch, 2.5*inch])
+        prontas_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Times-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, cor_fundo]),
+            ('GRID', (0, 0), (-1, -1), 0.5, cor_secundaria),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4)
+        ]))
+        
+        story.append(prontas_table)
+        
+        if len(df_prontas) > 20:
+            story.append(Paragraph(f"... e mais {len(df_prontas) - 20} tarefas prontas para publicação.", styles['Normal']))
+    else:
+        story.append(Paragraph("Nenhuma tarefa pronta para publicação encontrada no período.", insight_style_neutro))
+    
+    story.append(Spacer(1, 30))
+    
+    # 8. CONCLUSÕES
+    story.append(Paragraph("7. CONCLUSÕES", subtitle_style))
+    
+    conclusao_texto = f"""
+    Com base na análise dos dados apresentados, observamos que o processo de qualidade está 
+    {'em excelente estado' if taxa_aprovacao >= 80 else 'funcionando adequadamente' if taxa_aprovacao >= 60 else 'necessitando de melhorias urgentes'}.
+    """
+    
+    story.append(Paragraph(conclusao_texto, normal_enhanced))
+    story.append(Spacer(1, 15))
+    
+
+    
+
+    
+    # Rodapé profissional
+    story.append(HRFlowable(width="100%", thickness=1, color=cor_secundaria))
+    story.append(Spacer(1, 12))
+    
+    # Informações do rodapé simplificado
+    from datetime import datetime
+    footer_data = [
+        ['📅 Data de Geração:', datetime.now().strftime('%d/%m/%Y às %H:%M')],
+        ['🔒 Confidencialidade:', 'Documento Interno - Uso Restrito']
+    ]
+    
+    footer_table = Table(footer_data, colWidths=[2.0*inch, 4.0*inch])
+    footer_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Times-Bold'),
+        ('FONTNAME', (1, 0), (1, -1), 'Times-Roman'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('TEXTCOLOR', (0, 0), (0, -1), cor_secundaria),
+        ('TEXTCOLOR', (1, 0), (1, -1), colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3)
+    ]))
+    
+    story.append(footer_table)
+    story.append(Spacer(1, 8))
+    
+    # Assinatura digital
+    assinatura_style = ParagraphStyle(
+        'AssinaturaStyle',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=cor_secundaria,
+        fontName='Times-Italic',
+        alignment=1
+    )
+    
+    story.append(Paragraph("🔐 Relatório gerado automaticamente pelo sistema de métricas DelTech", assinatura_style))
+    story.append(Paragraph("© 2025 DelTech - Todos os direitos reservados", assinatura_style))
+    
+    # Construir PDF
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+def criar_pdf_visao_geral(df_filtrado, df_original, df_sem_teste=None):
+    """
+    Cria um PDF da Visão Geral Estratégica
+    """
+    if not PDF_AVAILABLE:
+        st.error("📄 Bibliotecas PDF não disponíveis. Instale: pip install reportlab kaleido")
+        return None
+    
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    styles = getSampleStyleSheet()
+    story = []
+    
+    # Título do relatório
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        spaceAfter=30,
+        alignment=1
+    )
+    story.append(Paragraph("Visão Geral Estratégica - QA", title_style))
+    story.append(Paragraph(f"Data: {date.today().strftime('%d/%m/%Y')}", styles['Normal']))
+    story.append(Spacer(1, 20))
+    
+    # Métricas principais
+    story.append(Paragraph("Principais Indicadores", styles['Heading2']))
+    
+    total_planilha = len(df_original)
+    total_testes_efetuados = len(df_filtrado)
+    cobertura_teste = (total_testes_efetuados / total_planilha * 100) if total_planilha > 0 else 0
+    aprovadas = len(df_filtrado[df_filtrado['Status'] == 'APROVADA']) if 'Status' in df_filtrado.columns else 0
+    prontas = len(df_filtrado[df_filtrado['Status'] == 'PRONTO PARA PUBLICAÇÃO']) if 'Status' in df_filtrado.columns else 0
+    total_aprovadas_pdf = aprovadas + prontas
+    rejeitadas = len(df_filtrado[df_filtrado['Status'] == 'REJEITADA']) if 'Status' in df_filtrado.columns else 0
+    taxa_aprovacao = (total_aprovadas_pdf / (total_aprovadas_pdf + rejeitadas) * 100) if (total_aprovadas_pdf + rejeitadas) > 0 else 0
+    
+    metricas_data = [
+        ['Indicador', 'Valor'],
+        ['Total de Registros', f'{total_planilha:,}'],
+        ['Testes Realizados', f'{total_testes_efetuados:,}'],
+        ['Cobertura de Testes', f'{cobertura_teste:.1f}%'],
+        ['Taxa de Aprovação', f'{taxa_aprovacao:.1f}%'],
+        ['Tarefas Aprovadas', f'{aprovadas:,}'],
+        ['Tarefas Rejeitadas', f'{rejeitadas:,}']
+    ]
+    
+    metricas_table = Table(metricas_data)
+    metricas_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Times-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    
+    story.append(metricas_table)
+    story.append(Spacer(1, 30))
+    
+    # Adicionar gráficos principais
+    story.append(Paragraph("Análise Visual", styles['Heading2']))
+    
+    # Gráfico de evolução da qualidade
+    try:
+        fig_evolucao = grafico_evolucao_qualidade(df_filtrado, por_ambiente=False)
+        if fig_evolucao:
+            img_bytes = exportar_grafico_para_pdf(fig_evolucao, "Evolução da Qualidade")
+            if img_bytes:
+                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+                story.append(Paragraph("Evolução da Qualidade", styles['Heading3']))
+                story.append(img)
+                story.append(Spacer(1, 20))
+    except Exception as e:
+        story.append(Paragraph(f"Erro ao gerar gráfico de evolução: {e}", styles['Normal']))
+    
+    # Construir PDF
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+def criar_pdf_generico(titulo, df_filtrado, graficos_funcoes=None):
+    """
+    Cria um PDF genérico para qualquer aba
+    """
+    if not PDF_AVAILABLE:
+        st.error("📄 Bibliotecas PDF não disponíveis. Instale: pip install reportlab kaleido")
+        return None
+    
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    styles = getSampleStyleSheet()
+    story = []
+    
+    # Título do relatório
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        spaceAfter=30,
+        alignment=1
+    )
+    story.append(Paragraph(titulo, title_style))
+    story.append(Paragraph(f"Data: {date.today().strftime('%d/%m/%Y')}", styles['Normal']))
+    story.append(Spacer(1, 20))
+    
+    # Informações básicas
+    story.append(Paragraph("Resumo dos Dados", styles['Heading2']))
+    story.append(Paragraph(f"Total de registros analisados: {len(df_filtrado)}", styles['Normal']))
+    story.append(Spacer(1, 20))
+    
+    # Adicionar gráficos se fornecidos
+    if graficos_funcoes:
+        story.append(Paragraph("Análise Visual", styles['Heading2']))
+        for nome_grafico, funcao_grafico in graficos_funcoes.items():
+            try:
+                fig = funcao_grafico(df_filtrado)
+                if fig:
+                    img_bytes = exportar_grafico_para_pdf(fig, nome_grafico)
+                    if img_bytes:
+                        img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+                        story.append(Paragraph(nome_grafico, styles['Heading3']))
+                        story.append(img)
+                        story.append(Spacer(1, 20))
+            except Exception as e:
+                story.append(Paragraph(f"Erro ao gerar {nome_grafico}: {e}", styles['Normal']))
+    
+    # Construir PDF
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
+def botao_exportar_pdf(nome_relatorio, funcao_exportar, *args):
+    """
+    Cria um botão para exportar PDF
+    """
+    if st.button(f"📄 Exportar {nome_relatorio} em PDF", key=f"export_{nome_relatorio}"):
+        with st.spinner(f"Gerando PDF do {nome_relatorio}..."):
+            pdf_buffer = funcao_exportar(*args)
+            if pdf_buffer:
+                st.download_button(
+                    label=f"⬇️ Download {nome_relatorio}.pdf",
+                    data=pdf_buffer.getvalue(),
+                    file_name=f"{nome_relatorio}_{date.today().strftime('%Y%m%d')}.pdf",
+                    mime="application/pdf",
+                    key=f"download_{nome_relatorio}"
+                )
+                st.success(f"✅ PDF do {nome_relatorio} gerado com sucesso!")
 
 def carregar_dados():
     # Tentar carregar automaticamente do Google Sheets
@@ -60,12 +883,11 @@ def processar_dados(df):
     if 'Data' in df.columns:
         df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
     
-    # Considerar "PRONTO PARA PUBLICAÇÃO" como "APROVADA"
-    if 'Status' in df.columns:
-        df['Status'] = df['Status'].replace('PRONTO PARA PUBLICAÇÃO', 'APROVADA')
+    # Manter status original - não substituir "PRONTO PARA PUBLICAÇÃO"
     
     colunas_esperadas = ['Data', 'Sprint', 'Time', 'Nome da Task', 'Link da Task', 
                         'Status', 'Responsável', 'Motivo', 'Motivo2', 'Motivo3', 
+                        'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7', 'Ambiente',
                         'Responsavel pelo teste', 'ID', 'Erros']
     
     colunas_faltantes = [col for col in colunas_esperadas if col not in df.columns]
@@ -95,7 +917,7 @@ def contar_bugs_por_time(df_rejeitadas):
         return pd.Series(dtype=int)
     
     bugs_por_time = {}
-    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
     
     for _, row in df_rejeitadas.iterrows():
         time = row.get('Time', 'Desconhecido')
@@ -112,12 +934,12 @@ def contar_bugs_por_time(df_rejeitadas):
     return pd.Series(bugs_por_time).sort_values(ascending=False)
 
 def contar_total_bugs(df_rejeitadas):
-    """Conta o total de bugs considerando Motivo, Motivo2 e Motivo3"""
+    """Conta o total de bugs considerando Motivo, Motivo2, Motivo3, Motivo4, Motivo5, Motivo6 e Motivo7"""
     if df_rejeitadas.empty:
         return 0
     
     total_bugs = 0
-    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
     
     for _, row in df_rejeitadas.iterrows():
         # Conta cada motivo não nulo como um bug separado, excluindo não-bugs
@@ -158,7 +980,7 @@ def contar_erros_por_time(df_filtrado):
     df_rejeitadas_historicas = df_sem_erros_coluna[df_sem_erros_coluna['Status'] == 'REJEITADA']
     
     # Contar motivos como erros históricos por time
-    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
     for _, row in df_rejeitadas_historicas.iterrows():
         time = row.get('Time', 'Desconhecido')
         if time not in erros_por_time:
@@ -194,7 +1016,7 @@ def contar_total_erros(df_filtrado):
     df_rejeitadas_historicas = df_sem_erros_coluna[df_sem_erros_coluna['Status'] == 'REJEITADA']
     
     # Contar motivos como erros históricos
-    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
     for _, row in df_rejeitadas_historicas.iterrows():
         for col in motivos_cols:
             if col in row and pd.notna(row[col]) and str(row[col]).strip() != '':
@@ -252,7 +1074,7 @@ def contar_erros_por_testador(df_filtrado):
     df_rejeitadas_historicas = df_sem_erros_coluna[df_sem_erros_coluna['Status'] == 'REJEITADA']
     
     # Contar motivos como erros históricos por testador
-    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
     for _, row in df_rejeitadas_historicas.iterrows():
         testador = row.get('Responsavel pelo teste', 'Desconhecido')
         if testador not in erros_por_testador:
@@ -296,7 +1118,7 @@ def analisar_distribuicao_erros(df_filtrado):
     df_rejeitadas_historicas = df_sem_erros_coluna[df_sem_erros_coluna['Status'] == 'REJEITADA']
     
     # Contar motivos como erros históricos
-    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
     testes_historicos_com_erro = set()
     
     for idx, row in df_rejeitadas_historicas.iterrows():
@@ -360,7 +1182,7 @@ def analisar_qualidade_unificada(df_filtrado):
     # Análise de motivos
     motivos_analysis = {}
     if not df_rejeitadas.empty:
-        motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+        motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
         motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
         
         if motivos_existentes:
@@ -484,8 +1306,8 @@ def grafico_bugs_por_status(df_bugs):
         'Concluído': '#4CAF50',  # Verde para concluído
         'Corrigido': '#4CAF50',  # Verde para corrigido
         'Pendente': '#FFA726',   # Laranja para pendente
-        'Em correção': '#2196F3', # Azul para em correção
-        'Em correcao': '#2196F3', # Azul para em correção
+        'Em correção': '#4CAF50', # Verde para em correção
+        'Em correcao': '#4CAF50', # Verde para em correção
         'Aberto': '#FF5722'      # Vermelho para aberto
     }
     
@@ -609,11 +1431,22 @@ def grafico_status_distribuicao(df_filtrado):
             return None
             
         status_counts = df_status_valido['Status'].value_counts()
+        
+        # Definir cores baseadas no status
+        color_map = {
+            'APROVADA': '#28a745',  # Verde para aprovada
+            'REJEITADA': '#dc3545',  # Vermelho para rejeitada
+            'PRONTO PARA PUBLICAÇÃO': '#2E7D32'  # Verde para pronto
+        }
+        
+        # Criar lista de cores baseada nos status presentes
+        colors = [color_map.get(status, '#6c757d') for status in status_counts.index]
+        
         fig = px.pie(
             values=status_counts.values, 
             names=status_counts.index,
             title="🎯 Resultado dos Testes de Qualidade",
-            color_discrete_sequence=['#4ECDC4', '#45B7D1', '#6C5CE7', '#96CEB4', '#FECA57']
+            color_discrete_sequence=colors
         )
         fig.update_traces(
             textinfo='label+percent+value',
@@ -683,6 +1516,13 @@ def grafico_timeline_tasks(df_filtrado):
             timeline_data = df_timeline.groupby(['Mes', 'Status']).size().reset_index(name='Count')
             timeline_data['Mes'] = timeline_data['Mes'].astype(str)
             
+            # Definir cores para os status
+            color_map = {
+                'APROVADA': '#28a745',  # Verde para aprovada
+                'REJEITADA': '#dc3545',  # Vermelho para rejeitada
+                'PRONTO PARA PUBLICAÇÃO': '#2E7D32'  # Verde para pronto
+            }
+            
             fig = px.bar(
                 timeline_data,
                 x='Mes',
@@ -690,7 +1530,8 @@ def grafico_timeline_tasks(df_filtrado):
                 color='Status',
                 title="📈 Evolução dos Testes de Qualidade",
                 labels={'Count': 'Tasks Testadas por Dia', 'Mes': 'Mês'},
-                text='Count'
+                text='Count',
+                color_discrete_map=color_map
             )
             fig.update_layout(
                 margin=dict(t=50, b=80, l=80, r=80),
@@ -701,47 +1542,89 @@ def grafico_timeline_tasks(df_filtrado):
             return fig
     return None
 
-def grafico_motivos_rejeicao(df_filtrado):
+def grafico_motivos_rejeicao(df_filtrado, por_ambiente=False):
     if 'Status' in df_filtrado.columns:
         df_rejeitadas = df_filtrado[df_filtrado['Status'] == 'REJEITADA']
-        motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+        motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
         motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
         
         if motivos_existentes and not df_rejeitadas.empty:
-            todos_motivos = []
-            for col in motivos_existentes:
-                motivos = df_rejeitadas[col].dropna().tolist()
-                todos_motivos.extend(motivos)
-            
-            if todos_motivos:
-                # Filtrar motivos que não são bugs reais
-                motivos_filtrados = [motivo for motivo in todos_motivos 
-                                   if motivo.lower() not in ['aprovada', 'sem recusa']]
+            # Se por_ambiente=True e temos coluna Ambiente, criar análise por ambiente
+            if por_ambiente and 'Ambiente' in df_rejeitadas.columns and df_rejeitadas['Ambiente'].notna().any():
+                motivos_ambiente = []
+                for _, row in df_rejeitadas.iterrows():
+                    ambiente = row.get('Ambiente', 'N/A')
+                    for col in motivos_existentes:
+                        motivo = row[col]
+                        if (pd.notna(motivo) and 
+                            str(motivo).strip() != '' and 
+                            str(motivo).lower() not in ['aprovada', 'sem recusa', 'nan', 'none']):
+                            motivos_ambiente.append({'Motivo': str(motivo).strip(), 'Ambiente': ambiente})
                 
-                if motivos_filtrados:
-                    motivos_counts = pd.Series(motivos_filtrados).value_counts().head(10)
-                else:
-                    return None
-                fig = px.bar(
-                    y=motivos_counts.index,
-                    x=motivos_counts.values,
-                    orientation='h',
-                    title="🔍 Principais Problemas Detectados pelo Q.A",
-                    labels={'x': 'Bugs Identificados', 'y': 'Tipo de Problema'},
-                    text=motivos_counts.values
-                )
-                fig.update_traces(
-                    marker_color='#4ECDC4',
-                    textposition='outside',
-                    texttemplate='%{x}',
-                    textfont_size=12,
-                    hovertemplate='Problema: %{y}<br>Ocorrências: %{x}<extra></extra>'
-                )
-                fig.update_layout(
-                    margin=dict(t=50, b=80, l=250, r=150),
-                    height=max(450, len(motivos_counts) * 40)
-                )
-                return fig
+                if motivos_ambiente:
+                    df_motivos = pd.DataFrame(motivos_ambiente)
+                    motivos_counts = df_motivos.groupby(['Motivo', 'Ambiente']).size().reset_index(name='Count')
+                    motivos_counts = motivos_counts.sort_values('Count', ascending=True).tail(20)
+                    
+                    fig = px.bar(
+                        motivos_counts,
+                        y='Motivo',
+                        x='Count',
+                        color='Ambiente',
+                        orientation='h',
+                        title="🔍 Principais Problemas por Ambiente",
+                        labels={'Count': 'Bugs Identificados', 'Motivo': 'Tipo de Problema'},
+                        text='Count'
+                    )
+                    fig.update_traces(
+                        textposition='outside',
+                        texttemplate='%{x}',
+                        textfont_size=10,
+                        hovertemplate='Problema: %{y}<br>Ambiente: %{fullData.name}<br>Ocorrências: %{x}<extra></extra>'
+                    )
+                    fig.update_layout(
+                        margin=dict(t=50, b=80, l=250, r=150),
+                        height=max(450, len(motivos_counts) * 25)
+                    )
+                    return fig
+            else:
+                # Versão original sem ambiente
+                todos_motivos = []
+                for col in motivos_existentes:
+                    motivos = df_rejeitadas[col].dropna().tolist()
+                    todos_motivos.extend(motivos)
+                
+                if todos_motivos:
+                    # Filtrar motivos que não são bugs reais
+                    motivos_filtrados = [str(motivo).strip() for motivo in todos_motivos 
+                                       if (pd.notna(motivo) and 
+                                           str(motivo).strip() != '' and 
+                                           str(motivo).lower() not in ['aprovada', 'sem recusa', 'nan', 'none'])]
+                    
+                    if motivos_filtrados:
+                        motivos_counts = pd.Series(motivos_filtrados).value_counts().head(10)
+                    else:
+                        return None
+                    fig = px.bar(
+                        y=motivos_counts.index,
+                        x=motivos_counts.values,
+                        orientation='h',
+                        title="🔍 Principais Problemas Detectados pelo Q.A",
+                        labels={'x': 'Bugs Identificados', 'y': 'Tipo de Problema'},
+                        text=motivos_counts.values
+                    )
+                    fig.update_traces(
+                        marker_color='#4ECDC4',
+                        textposition='outside',
+                        texttemplate='%{x}',
+                        textfont_size=12,
+                        hovertemplate='Problema: %{y}<br>Ocorrências: %{x}<extra></extra>'
+                    )
+                    fig.update_layout(
+                        margin=dict(t=50, b=80, l=250, r=150),
+                        height=max(450, len(motivos_counts) * 40)
+                    )
+                    return fig
     return None
 
 
@@ -779,29 +1662,57 @@ def grafico_rejeicoes_por_dev(df_filtrado):
                 return fig
     return None
 
-def grafico_evolucao_qualidade(df_filtrado):
+def grafico_evolucao_qualidade(df_filtrado, por_ambiente=False):
     if 'Data' in df_filtrado.columns and 'Status' in df_filtrado.columns:
         df_timeline = df_filtrado.dropna(subset=['Data'])
         if not df_timeline.empty:
             df_timeline['Mes'] = df_timeline['Data'].dt.to_period('M')
-            monthly_stats = df_timeline.groupby(['Mes', 'Status']).size().unstack(fill_value=0)
             
-            if 'APROVADA' in monthly_stats.columns and 'REJEITADA' in monthly_stats.columns:
-                monthly_stats['Total'] = monthly_stats.sum(axis=1)
-                monthly_stats['Taxa_Aprovacao'] = (monthly_stats['APROVADA'] / monthly_stats['Total'] * 100).round(1)
-                monthly_stats = monthly_stats.reset_index()
-                monthly_stats['Mes'] = monthly_stats['Mes'].astype(str)
+            # Se temos informação de ambiente e foi solicitado, mostrar evolução por ambiente
+            if por_ambiente and 'Ambiente' in df_filtrado.columns and df_filtrado['Ambiente'].notna().any():
+                monthly_stats = df_timeline.groupby(['Mes', 'Status', 'Ambiente']).size().unstack(fill_value=0)
                 
-                fig = px.line(
-                    monthly_stats,
-                    x='Mes',
-                    y='Taxa_Aprovacao',
-                    title="📈 Evolução da Taxa de Aprovação ao Longo do Tempo",
-                    labels={'Taxa_Aprovacao': 'Taxa de Aprovação (%)', 'Mes': 'Mês'},
-                    markers=True
-                )
-                fig.update_traces(hovertemplate='Mês: %{x}<br>Taxa: %{y}%<extra></extra>')
-                return fig
+                if 'APROVADA' in monthly_stats.columns or 'REJEITADA' in monthly_stats.columns or 'PRONTO PARA PUBLICAÇÃO' in monthly_stats.columns:
+                    aprovadas_col = monthly_stats.get('APROVADA', 0) + monthly_stats.get('PRONTO PARA PUBLICAÇÃO', 0)
+                    rejeitadas_col = monthly_stats.get('REJEITADA', 0)
+                    monthly_stats['Total'] = aprovadas_col + rejeitadas_col
+                    monthly_stats['Taxa_Aprovacao'] = (aprovadas_col / monthly_stats['Total'] * 100).round(1).fillna(0)
+                    monthly_stats = monthly_stats.reset_index()
+                    monthly_stats['Mes'] = monthly_stats['Mes'].astype(str)
+                    
+                    fig = px.line(
+                        monthly_stats,
+                        x='Mes',
+                        y='Taxa_Aprovacao',
+                        color='Ambiente',
+                        title="📈 Evolução da Taxa de Aprovação por Ambiente",
+                        labels={'Taxa_Aprovacao': 'Taxa de Aprovação (%)', 'Mes': 'Mês'},
+                        markers=True
+                    )
+                    fig.update_traces(hovertemplate='Mês: %{x}<br>Ambiente: %{fullData.name}<br>Taxa: %{y}%<extra></extra>')
+                    return fig
+            else:
+                # Versão original sem ambiente
+                monthly_stats = df_timeline.groupby(['Mes', 'Status']).size().unstack(fill_value=0)
+                
+                if 'APROVADA' in monthly_stats.columns or 'REJEITADA' in monthly_stats.columns or 'PRONTO PARA PUBLICAÇÃO' in monthly_stats.columns:
+                    aprovadas_col = monthly_stats.get('APROVADA', 0) + monthly_stats.get('PRONTO PARA PUBLICAÇÃO', 0)
+                    rejeitadas_col = monthly_stats.get('REJEITADA', 0)
+                    monthly_stats['Total'] = aprovadas_col + rejeitadas_col
+                    monthly_stats['Taxa_Aprovacao'] = (aprovadas_col / monthly_stats['Total'] * 100).round(1).fillna(0)
+                    monthly_stats = monthly_stats.reset_index()
+                    monthly_stats['Mes'] = monthly_stats['Mes'].astype(str)
+                    
+                    fig = px.line(
+                        monthly_stats,
+                        x='Mes',
+                        y='Taxa_Aprovacao',
+                        title="📈 Evolução da Taxa de Aprovação ao Longo do Tempo",
+                        labels={'Taxa_Aprovacao': 'Taxa de Aprovação (%)', 'Mes': 'Mês'},
+                        markers=True
+                    )
+                    fig.update_traces(hovertemplate='Mês: %{x}<br>Taxa: %{y}%<extra></extra>')
+                    return fig
     return None
 
 def grafico_erros_por_time(df_filtrado):
@@ -917,7 +1828,7 @@ def grafico_distribuicao_erros(df_filtrado):
         values=values,
         names=labels,
         title="🎯 Distribuição Completa de Testes",
-        color_discrete_sequence=['#4CAF50', '#FF6B6B', '#FFA726']
+        color_discrete_sequence=['#28a745', '#dc3545', '#6c757d']
     )
     
     fig.update_traces(
@@ -977,7 +1888,7 @@ def grafico_distribuicao_bugs_tipo(df_filtrado):
     """Gráfico de distribuição dos tipos de bugs mais comuns"""
     if 'Status' in df_filtrado.columns:
         df_rejeitadas = df_filtrado[df_filtrado['Status'] == 'REJEITADA']
-        motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+        motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
         motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
         
         if motivos_existentes and not df_rejeitadas.empty:
@@ -1059,7 +1970,7 @@ def grafico_motivos_por_time(df_filtrado):
     if df_rejeitadas.empty:
         return None
     
-    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
     motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
     
     if not motivos_existentes:
@@ -1113,7 +2024,7 @@ def grafico_motivos_por_desenvolvedor(df_filtrado):
     if df_rejeitadas.empty:
         return None
     
-    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
     motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
     
     if not motivos_existentes:
@@ -1167,7 +2078,7 @@ def grafico_ranking_problemas(df_filtrado):
     if df_rejeitadas.empty:
         return None
     
-    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
     motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
     
     if not motivos_existentes:
@@ -1201,9 +2112,11 @@ def grafico_ranking_problemas(df_filtrado):
         title_font_color='#FFFFFF',
         xaxis_title='Quantidade de Ocorrências',
         yaxis_title='Tipo de Problema',
-        margin=dict(t=60, b=80, l=80, r=80),
-        height=500,
-        yaxis={'categoryorder': 'total ascending'}
+        margin=dict(t=60, b=80, l=200, r=50),
+        height=450,
+        yaxis={'categoryorder': 'total ascending'},
+        showlegend=False,
+        coloraxis_showscale=False
     )
     
     return fig
@@ -1281,14 +2194,89 @@ def grafico_taxa_rejeicao_por_time(df_filtrado):
                 return fig
     return None
 
+def grafico_distribuicao_ambientes(df_filtrado):
+    """Gráfico de distribuição de testes por ambiente"""
+    if 'Ambiente' in df_filtrado.columns:
+        # Filtrar apenas registros com ambiente válido (não nulo e não vazio)
+        df_ambiente_valido = df_filtrado[df_filtrado['Ambiente'].notna() & (df_filtrado['Ambiente'].str.strip() != '')]
+        
+        if df_ambiente_valido.empty:
+            return None
+            
+        # Contar distribuição por ambiente
+        ambiente_counts = df_ambiente_valido['Ambiente'].value_counts()
+        
+        if not ambiente_counts.empty:
+            # Criar gráfico de pizza
+            fig = px.pie(
+                values=ambiente_counts.values,
+                names=ambiente_counts.index,
+                title="🌐 Distribuição de Testes por Ambiente",
+                color_discrete_sequence=px.colors.qualitative.Set3
+            )
+            
+            fig.update_traces(
+                textposition='inside',
+                textinfo='percent+label',
+                hovertemplate='Ambiente: %{label}<br>Testes: %{value}<br>Percentual: %{percent}<extra></extra>'
+            )
+            
+            fig.update_layout(
+                margin=dict(t=60, b=60, l=60, r=60),
+                height=400,
+                showlegend=True,
+                legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.05)
+            )
+            
+            return fig
+    return None
+
+def grafico_ambiente_por_status(df_filtrado):
+    """Gráfico de status por ambiente"""
+    if 'Ambiente' in df_filtrado.columns and 'Status' in df_filtrado.columns:
+        # Filtrar apenas registros com ambiente válido (não nulo e não vazio)
+        df_ambiente_valido = df_filtrado[df_filtrado['Ambiente'].notna() & (df_filtrado['Ambiente'].str.strip() != '')]
+        
+        if df_ambiente_valido.empty:
+            return None
+            
+        # Criar tabela cruzada
+        ambiente_status = pd.crosstab(df_ambiente_valido['Ambiente'], df_ambiente_valido['Status'])
+        
+        if not ambiente_status.empty:
+            # Criar gráfico de barras empilhadas
+            fig = px.bar(
+                ambiente_status,
+                title="📊 Status de Testes por Ambiente",
+                labels={'value': 'Quantidade de Testes', 'index': 'Ambiente'},
+                color_discrete_map={
+                    'APROVADA': '#28a745',
+                    'REJEITADA': '#dc3545',
+                    'EM ANDAMENTO': '#ffc107',
+                    'PENDENTE': '#6c757d'
+                }
+            )
+            
+            fig.update_layout(
+                margin=dict(t=60, b=80, l=80, r=80),
+                height=450,
+                xaxis_title="Ambiente",
+                yaxis_title="Quantidade de Testes",
+                legend_title="Status"
+            )
+            
+            return fig
+    return None
+
 def grafico_comparativo_testadores(df_filtrado):
     """Gráfico comparativo de produtividade entre testadores"""
     if 'Responsavel pelo teste' in df_filtrado.columns and 'Status' in df_filtrado.columns:
         testador_stats = df_filtrado.groupby('Responsavel pelo teste').agg({
-            'Status': ['count', lambda x: (x == 'REJEITADA').sum(), lambda x: (x == 'APROVADA').sum()]
+            'Status': ['count', lambda x: (x == 'REJEITADA').sum(), lambda x: (x == 'APROVADA').sum(), lambda x: (x == 'PRONTO PARA PUBLICAÇÃO').sum()]
         }).round(1)
         
-        testador_stats.columns = ['Total_Testes', 'Bugs_Encontrados', 'Testes_Aprovados']
+        testador_stats.columns = ['Total_Testes', 'Bugs_Encontrados', 'Testes_Aprovados', 'Testes_Prontos']
+        testador_stats['Total_Aprovadas'] = testador_stats['Testes_Aprovados'] + testador_stats['Testes_Prontos']
         testador_stats['Taxa_Deteccao'] = (testador_stats['Bugs_Encontrados'] / testador_stats['Total_Testes'] * 100).round(1)
         testador_stats = testador_stats.reset_index()
         
@@ -1301,7 +2289,9 @@ def grafico_comparativo_testadores(df_filtrado):
                 y=testador_stats['Total_Testes'],
                 yaxis='y',
                 offsetgroup=1,
-                marker_color='lightblue'
+                marker_color='lightgreen',
+                text=testador_stats['Total_Testes'],
+                textposition='outside'
             ))
             
             fig.add_trace(go.Bar(
@@ -1310,7 +2300,9 @@ def grafico_comparativo_testadores(df_filtrado):
                 y=testador_stats['Bugs_Encontrados'],
                 yaxis='y',
                 offsetgroup=2,
-                marker_color='#FF6B6B'
+                marker_color='#FF6B6B',
+                text=testador_stats['Bugs_Encontrados'],
+                textposition='outside'
             ))
             
             fig.add_trace(go.Scatter(
@@ -1421,12 +2413,15 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
         )
     
     with col7:
-        taxa_aprovacao = (aprovadas / total_testes_efetuados * 100) if total_testes_efetuados > 0 else 0
+        prontas_dash = len(df_filtrado[df_filtrado['Status'] == 'PRONTO PARA PUBLICAÇÃO']) if 'Status' in df_filtrado.columns else 0
+        total_aprovadas_dash = aprovadas + prontas_dash
+        rejeitadas_dash = len(df_filtrado[df_filtrado['Status'] == 'REJEITADA']) if 'Status' in df_filtrado.columns else 0
+        taxa_aprovacao = (total_aprovadas_dash / (total_aprovadas_dash + rejeitadas_dash) * 100) if (total_aprovadas_dash + rejeitadas_dash) > 0 else 0
         st.metric(
             "✅ Taxa de Aprovação", 
             f"{taxa_aprovacao:.1f}%",
-            delta=f"✅ {aprovadas:,} aprovados | 🚨 {total_testes_efetuados - aprovadas:,} rejeitados",
-            help=f"Percentual de aprovação na primeira validação: {aprovadas:,} de {total_testes_efetuados:,} testes. Meta recomendada: >75%"
+            delta=f"✅ {total_aprovadas_dash:,} aprovados | 🚨 {rejeitadas_dash:,} rejeitados",
+            help=f"Percentual de aprovação (incluindo prontas para publicação): {total_aprovadas_dash:,} de {total_aprovadas_dash + rejeitadas_dash:,} testes. Meta recomendada: >75%"
         )
     
     # === SEÇÃO 3: ANÁLISE DE ERROS ===
@@ -1488,7 +2483,7 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
     
     with col10:
         if not df_rejeitadas.empty:
-            motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+            motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
             motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
             
             if motivos_existentes:
@@ -1529,7 +2524,7 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
                 st.metric(
                     "🔍 Principal Tipo de Defeito", 
                     "Colunas ausentes",
-                    delta="📊 Motivo, Motivo2, Motivo3 não encontradas",
+                    delta="📊 Motivo, Motivo2, Motivo3, Motivo4, Motivo5, Motivo6, Motivo7 não encontradas",
                     help="As colunas de motivos não foram encontradas nos dados"
                 )
         else:
@@ -1668,11 +2663,18 @@ def main():
         st.markdown("---")
         
         # Criar abas para organizar o dashboard
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["📌 Visão Geral Estratégica", "🛡️ Prevenção e Qualidade", "🏁 Visão por Sprint", "🧑‍🤝‍🧑 Visão por Testador", "📋 Tarefas Sem Teste", "🔢 Análise de Erros", "🐛 Análise de Bugs", "📊 Relatório P.M."])
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["📌 Visão Geral Estratégica", "🛡️ Prevenção e Qualidade", "🏁 Visão por Sprint", "🧑‍🤝‍🧑 Visão por Testador", "📋 Tarefas Sem Teste", "🔢 Análise de Erros", "🐛 Análise de Bugs", "📊 Relatório"])
         
         with tab1:
             st.markdown("### 📌 **Visão Geral Estratégica**")
             st.markdown("*Dashboard Executivo - Impacto e Performance do Time de Qualidade*")
+            
+            # Botão de exportação PDF
+            col_export_geral, col_space_geral = st.columns([1, 3])
+            with col_export_geral:
+                botao_exportar_pdf("Visao_Geral_Estrategica", criar_pdf_visao_geral, df_com_teste, df, df_sem_teste)
+            
+            st.markdown("---")
             
             # === RESUMO EXECUTIVO PARA DIRETORIA ===
             st.markdown("#### 🎯 **Resumo Executivo - Principais Indicadores**")
@@ -1682,8 +2684,10 @@ def main():
             total_testes_efetuados = len(df_com_teste)
             cobertura_teste = (total_testes_efetuados / total_planilha * 100) if total_planilha > 0 else 0
             aprovadas = len(df_com_teste[df_com_teste['Status'] == 'APROVADA']) if 'Status' in df_com_teste.columns else 0
+            prontas_exec = len(df_com_teste[df_com_teste['Status'] == 'PRONTO PARA PUBLICAÇÃO']) if 'Status' in df_com_teste.columns else 0
+            total_aprovadas_exec = aprovadas + prontas_exec
             rejeitadas = len(df_com_teste[df_com_teste['Status'] == 'REJEITADA']) if 'Status' in df_com_teste.columns else 0
-            taxa_aprovacao = (aprovadas / total_testes_efetuados * 100) if total_testes_efetuados > 0 else 0
+            taxa_aprovacao = (total_aprovadas_exec / (total_aprovadas_exec + rejeitadas) * 100) if (total_aprovadas_exec + rejeitadas) > 0 else 0
             
             # Resumo em destaque
             col_resumo1, col_resumo2, col_resumo3 = st.columns(3)
@@ -1694,7 +2698,7 @@ def main():
             
             with col_resumo2:
                 status_qualidade = "🟢 Excelente" if taxa_aprovacao >= 75 else "🟡 Boa" if taxa_aprovacao >= 60 else "🔴 Atenção"
-                st.info(f"**✅ Taxa de Aprovação:** {taxa_aprovacao:.1f}% ({aprovadas:,}/{total_testes_efetuados:,} testes)\n\n**Status:** {status_qualidade}")
+                st.info(f"**✅ Taxa de Aprovação:** {taxa_aprovacao:.1f}% ({total_aprovadas_exec:,}/{total_aprovadas_exec + rejeitadas:,} testes)\n\n**Status:** {status_qualidade}")
             
             with col_resumo3:
                 bugs_encontrados = contar_total_bugs(df_com_teste[df_com_teste['Status'] == 'REJEITADA']) if not df_com_teste.empty else 0
@@ -1719,7 +2723,7 @@ def main():
             
             with col_exec1:
                 # Gráfico de evolução da qualidade
-                fig_evolucao = grafico_evolucao_qualidade(df_com_teste)
+                fig_evolucao = grafico_evolucao_qualidade(df_com_teste, por_ambiente=False)
                 if fig_evolucao:
                     st.plotly_chart(fig_evolucao, use_container_width=True, key="evolucao_qualidade")
                 
@@ -1748,8 +2752,10 @@ def main():
                 # Calcular métricas para recomendações
                 total_testes = len(df_com_teste)
                 aprovados = len(df_com_teste[df_com_teste['Status'] == 'APROVADA'])
+                prontos = len(df_com_teste[df_com_teste['Status'] == 'PRONTO PARA PUBLICAÇÃO'])
+                total_aprovados = aprovados + prontos
                 rejeitados = len(df_com_teste[df_com_teste['Status'] == 'REJEITADA'])
-                taxa_aprovacao = (aprovados / total_testes * 100) if total_testes > 0 else 0
+                taxa_aprovacao = (total_aprovados / total_testes * 100) if total_testes > 0 else 0
                 
                 col_rec1, col_rec2, col_rec3 = st.columns(3)
                 
@@ -1801,6 +2807,13 @@ def main():
         with tab2:
             st.markdown("### 🛡️ **Prevenção e Qualidade**")
             st.markdown("*Análise unificada: bugs identificados (motivos) + erros encontrados (quantitativos)*")
+            
+            # Botão de exportação PDF
+            col_export_prev, col_space_prev = st.columns([1, 3])
+            with col_export_prev:
+                botao_exportar_pdf("Prevencao_e_Qualidade", criar_pdf_generico, df_com_teste, df, df_sem_teste)
+            
+            st.markdown("---")
             
             # Análise unificada de qualidade
             analise_unificada = analisar_qualidade_unificada(df_com_teste)
@@ -1921,14 +2934,20 @@ def main():
                 with col_comp_visual1:
                     st.markdown("##### 📝 **Análise Qualitativa (Motivos)**")
                     
+                    # Opção de visualização por ambiente se disponível
+                    por_ambiente = False
+                    if 'Ambiente' in df_com_teste.columns and df_com_teste['Ambiente'].notna().any():
+                        por_ambiente = st.checkbox("📊 Visualizar por Ambiente", key="motivos_por_ambiente_principal")
+                    
                     # Gráfico de motivos de rejeição
-                    fig_motivos = grafico_motivos_rejeicao(df_com_teste)
+                    fig_motivos = grafico_motivos_rejeicao(df_com_teste, por_ambiente=por_ambiente)
                     if fig_motivos:
-                        fig_motivos.update_traces(
-                            marker_color=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57'],
-                            text=[f'✅ Mais comum' if i == 0 else '' for i in range(len(fig_motivos.data[0].x))],
-                            textposition='outside'
-                        )
+                        if not por_ambiente:
+                            fig_motivos.update_traces(
+                                marker_color=['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57'],
+                                text=[f'✅ Mais comum' if i == 0 else '' for i in range(len(fig_motivos.data[0].x))],
+                                textposition='outside'
+                            )
                         fig_motivos.update_layout(title_font_color='#FFFFFF')
                         st.plotly_chart(fig_motivos, use_container_width=True, key="motivos_rejeicao_principal")
                     
@@ -1940,7 +2959,7 @@ def main():
                         # Fallback: buscar diretamente nos dados
                         df_rejeitadas = df_com_teste[df_com_teste['Status'] == 'REJEITADA'] if 'Status' in df_com_teste.columns else pd.DataFrame()
                         if not df_rejeitadas.empty:
-                            motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+                            motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
                             todos_motivos = []
                             for col in motivos_cols:
                                 if col in df_rejeitadas.columns:
@@ -1981,7 +3000,7 @@ def main():
                 **🔍 Diferenças entre as Métricas:**
                 
                 **📝 Análise Qualitativa (Motivos):**
-                - Baseada nas colunas 'Motivo', 'Motivo2', 'Motivo3'
+                - Baseada nas colunas 'Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7'
                 - Identifica **tipos de problemas** encontrados
                 - Foca na **natureza dos defeitos** (ex: erro de lógica, interface, etc.)
                 - Útil para **prevenção** e melhoria de processos
@@ -2024,7 +3043,7 @@ def main():
                             y=status_counts.values,
                             title="📊 Taxa de Aprovação vs Rejeição",
                             color=status_counts.values,
-                            color_discrete_sequence=['#4ECDC4', '#FF6B6B'],
+                            color_discrete_sequence=['#28a745', '#dc3545'],
                             text=status_counts.values
                         )
                         fig_aprovacao.update_traces(textposition='outside')
@@ -2089,7 +3108,7 @@ def main():
                 
                 if not df_rejeitadas.empty and 'Time' in df_rejeitadas.columns:
                     # Análise de problemas por time
-                    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3']
+                    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
                     motivos_existentes = [col for col in motivos_cols if col in df_rejeitadas.columns]
                     
                     if motivos_existentes:
@@ -2168,8 +3187,13 @@ def main():
             st.markdown("---")
             st.markdown("#### 📈 **Evolução de Taxa ao Longo do Tempo**")
             
+            # Opção de visualização por ambiente se disponível
+            por_ambiente_evolucao = False
+            if 'Ambiente' in df_com_teste.columns and df_com_teste['Ambiente'].notna().any():
+                por_ambiente_evolucao = st.checkbox("📊 Visualizar evolução por Ambiente", key="evolucao_por_ambiente_principal")
+            
             # Melhorar gráfico de evolução
-            fig_evolucao = grafico_evolucao_qualidade(df_com_teste)
+            fig_evolucao = grafico_evolucao_qualidade(df_com_teste, por_ambiente=por_ambiente_evolucao)
             if fig_evolucao:
                 # Melhorar escala do eixo Y para mostrar variações reais
                 fig_evolucao.update_layout(
@@ -2194,6 +3218,13 @@ def main():
         with tab3:
             st.markdown("### 🏁 **Visão por Sprint**")
             st.markdown("*Tasks testadas por sprint e cobertura de Q.A por time*")
+            
+            # Botão de exportação PDF
+            col_export_sprint, col_space_sprint = st.columns([1, 3])
+            with col_export_sprint:
+                botao_exportar_pdf("Visao_por_Sprint", criar_pdf_generico, df_com_teste, df, df_sem_teste)
+            
+            st.markdown("---")
             
             # Análise por Sprint
             st.markdown("#### 📊 **Tasks Testadas por Sprint**")
@@ -2231,14 +3262,22 @@ def main():
             st.markdown("### 🧑‍🤝‍🧑 **Visão por Testador**")
             st.markdown("*Ranking de performance, produtividade e comparação entre testadores*")
             
+            # Botão de exportação PDF
+            col_export_testador, col_space_testador = st.columns([1, 3])
+            with col_export_testador:
+                botao_exportar_pdf("Visao_por_Testador", criar_pdf_generico, df_com_teste, df, df_sem_teste)
+            
+            st.markdown("---")
+            
             if 'Responsavel pelo teste' in df_com_teste.columns and not df_com_teste.empty:
                 testador_stats = df_com_teste.groupby('Responsavel pelo teste').agg({
-                    'Status': ['count', lambda x: (x == 'REJEITADA').sum(), lambda x: (x == 'APROVADA').sum()]
+                    'Status': ['count', lambda x: (x == 'REJEITADA').sum(), lambda x: (x == 'APROVADA').sum(), lambda x: (x == 'PRONTO PARA PUBLICAÇÃO').sum()]
                 }).round(1)
                 
-                testador_stats.columns = ['Total_Testes', 'Bugs_Encontrados', 'Testes_Aprovados']
+                testador_stats.columns = ['Total_Testes', 'Bugs_Encontrados', 'Testes_Aprovados', 'Testes_Prontos']
+                testador_stats['Total_Aprovadas'] = testador_stats['Testes_Aprovados'] + testador_stats['Testes_Prontos']
                 testador_stats['Taxa_Deteccao'] = (testador_stats['Bugs_Encontrados'] / testador_stats['Total_Testes'] * 100).round(1)
-                testador_stats['Taxa_Aprovacao'] = (testador_stats['Testes_Aprovados'] / testador_stats['Total_Testes'] * 100).round(1)
+                testador_stats['Taxa_Aprovacao'] = (testador_stats['Total_Aprovadas'] / testador_stats['Total_Testes'] * 100).round(1)
                 testador_stats['Produtividade'] = testador_stats['Total_Testes']
                 testador_stats = testador_stats.reset_index()
                 
@@ -2297,7 +3336,7 @@ def main():
                         x='Responsavel pelo teste',
                         y=['Taxa_Aprovacao', 'Taxa_Deteccao'],
                         title='📊 Comparativo de Taxas (%)',
-                        color_discrete_sequence=['#4ECDC4', '#FF6B6B'],
+                        color_discrete_sequence=['#28a745', '#ffc107'],
                         barmode='group'
                     )
                     fig_taxas.update_layout(
@@ -2366,7 +3405,7 @@ def main():
                     name='Total de Testes',
                     x=testador_stats['Responsavel pelo teste'],
                     y=testador_stats['Total_Testes'],
-                    marker_color='lightblue',
+                    marker_color='lightgreen',
                     text=testador_stats['Total_Testes'],
                     textposition='outside'
                 ))
@@ -2428,6 +3467,13 @@ def main():
         with tab5:
             st.markdown("### 📋 **Tarefas Sem Teste**")
             st.markdown("*Análise detalhada das tarefas que não passaram por testes de qualidade*")
+            
+            # Botão de exportação PDF
+            col_export_sem_teste, col_space_sem_teste = st.columns([1, 3])
+            with col_export_sem_teste:
+                botao_exportar_pdf("Tarefas_Sem_Teste", criar_pdf_generico, df_com_teste, df, df_sem_teste)
+            
+            st.markdown("---")
             
             if not df_sem_teste.empty:
                 # Filtros para tarefas sem teste
@@ -2560,6 +3606,13 @@ def main():
         with tab6:
             st.markdown("### 🔢 **Análise de Erros Encontrados**")
             st.markdown("*Análise detalhada dos erros identificados durante os testes*")
+            
+            # Botão de exportação PDF
+            col_export_erros, col_space_erros = st.columns([1, 3])
+            with col_export_erros:
+                botao_exportar_pdf("Analise_de_Erros", criar_pdf_generico, df_com_teste, df, df_sem_teste)
+            
+            st.markdown("---")
             
             # Informação sobre o escopo da análise
             st.info("ℹ️ **Importante**: A taxa de testes com erro é calculada sobre o total de testes realizados. O gráfico de distribuição mostra três categorias: testes com erro, testes sem erro e testes sem dados de erro preenchidos.")
@@ -2717,6 +3770,13 @@ def main():
         with tab7:
             st.markdown("### 🐛 **Análise Detalhada de Bugs**")
             st.markdown("*Insights profissionais sobre defeitos identificados em produção*")
+            
+            # Botão de exportação PDF
+            col_export_bugs, col_space_bugs = st.columns([1, 3])
+            with col_export_bugs:
+                botao_exportar_pdf("Analise_de_Bugs", criar_pdf_generico, df_com_teste, df, df_sem_teste)
+            
+            st.markdown("---")
             
             # Carregar dados de bugs
             df_bugs = carregar_dados_bugs()
@@ -2964,6 +4024,13 @@ def main():
             st.header("📊 Relatório Detalhado para P.M.")
             st.markdown("### Análise Detalhada de Bugs e Falhas por Tarefa")
             
+            # Botão de exportação PDF
+            col_export, col_space = st.columns([1, 3])
+            with col_export:
+                botao_exportar_pdf("Relatorio_PM", criar_pdf_relatorio_pm, df_com_teste, df, df_sem_teste)
+            
+            st.markdown("---")
+            
             # Filtros específicos para o relatório
             col1, col2, col3 = st.columns(3)
             
@@ -2999,6 +4066,8 @@ def main():
             
             # Seção 1: Resumo Executivo
             st.markdown("#### 📈 Resumo Executivo")
+            
+            # Primeira linha de métricas
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
@@ -3012,27 +4081,147 @@ def main():
                 )
             
             with col2:
-                total_rejeitadas = len(df_rejeitadas)
-                taxa_rejeicao = (total_rejeitadas / total_tasks * 100) if total_tasks > 0 else 0
-                st.metric("Tarefas Rejeitadas", total_rejeitadas, f"{taxa_rejeicao:.1f}%")
+                total_aprovadas = len(df_pm[df_pm['Status'] == 'APROVADA'])
+                st.metric("✅ Tarefas Aprovadas", total_aprovadas, delta="Entregues em produção")
             
             with col3:
-                total_com_erros = len(df_com_erros)
-                st.metric("Tarefas com Erros", total_com_erros)
+                total_prontas = len(df_pm[df_pm['Status'] == 'PRONTO PARA PUBLICAÇÃO'])
+                st.metric("🚀 Prontas p/ Publicação", total_prontas, delta="Aguardando deploy")
             
             with col4:
+                total_rejeitadas = len(df_rejeitadas)
+                taxa_rejeicao = (total_rejeitadas / total_tasks * 100) if total_tasks > 0 else 0
+                st.metric("❌ Tarefas Rejeitadas", total_rejeitadas, f"{taxa_rejeicao:.1f}%")
+            
+            # Segunda linha de métricas
+            col5, col6, col7, col8 = st.columns(4)
+            
+            with col5:
+                total_com_erros = len(df_com_erros)
+                st.metric("⚠️ Tarefas com Erros", total_com_erros)
+            
+            with col6:
                 total_problemas = total_rejeitadas + total_com_erros
-                st.metric("Total de Problemas", total_problemas)
+                st.metric("🔴 Total de Problemas", total_problemas)
+            
+            with col7:
+                total_concluidas = total_aprovadas + total_prontas
+                st.metric("🎯 Tarefas Concluídas", total_concluidas)
+            
+            with col8:
+                taxa_sucesso = (total_concluidas / total_tasks * 100) if total_tasks > 0 else 0
+                st.metric("📊 Taxa de Sucesso", f"{taxa_sucesso:.1f}%")
             
             st.divider()
             
-            # Seção 2: Detalhamento de Tarefas Rejeitadas
+            # Seção 2: Tarefas Entregues e Prontas para Publicação
+            st.markdown("#### ✅ Tarefas Entregues e Produção")
+            
+            # Filtrar tarefas aprovadas
+            df_aprovadas = df_pm[df_pm['Status'] == 'APROVADA'].copy()
+            
+            if len(df_aprovadas) > 0:
+                # Criar tabela de tarefas aprovadas
+                df_aprovadas_detalhada = df_aprovadas[['Data', 'Sprint', 'Time', 'Nome da Task', 'Link da Task', 
+                                                     'Responsável', 'Descrição', 'Responsavel pelo teste']].copy()
+                
+                # Reorganizar colunas para melhor visualização
+                colunas_aprovadas = ['Data', 'Sprint', 'Time', 'Nome da Task', 'Responsável', 
+                                   'Descrição', 'Responsavel pelo teste', 'Link da Task']
+                
+                df_aprovadas_exibir = df_aprovadas_detalhada[colunas_aprovadas].copy()
+                df_aprovadas_exibir['Data'] = df_aprovadas_exibir['Data'].dt.strftime('%d/%m/%Y')
+                
+                # Preencher descrições vazias
+                df_aprovadas_exibir['Descrição'] = df_aprovadas_exibir['Descrição'].fillna('Descrição não informada')
+                
+                st.dataframe(
+                    df_aprovadas_exibir,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Link da Task": st.column_config.LinkColumn(
+                            "Link da Task",
+                            help="Clique para abrir a task",
+                            display_text="🔗 Abrir Task"
+                        ),
+                        "Descrição": st.column_config.TextColumn(
+                            "Descrição",
+                            help="Descrição da tarefa entregue",
+                            width="large"
+                        )
+                    }
+                )
+                
+                # Botão para exportar dados de aprovadas
+                csv_aprovadas = df_aprovadas_exibir.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    label="📥 Exportar Tarefas Entregues (CSV)",
+                    data=csv_aprovadas,
+                    file_name=f"tarefas_entregues_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("Nenhuma tarefa aprovada encontrada no período selecionado.")
+            
+            st.markdown("#### 🚀 Tarefas Prontas para Publicação")
+            
+            # Filtrar tarefas prontas para publicação
+            df_prontas = df_pm[df_pm['Status'] == 'PRONTO PARA PUBLICAÇÃO'].copy()
+            
+            if len(df_prontas) > 0:
+                # Criar tabela de tarefas prontas
+                df_prontas_detalhada = df_prontas[['Data', 'Sprint', 'Time', 'Nome da Task', 'Link da Task', 
+                                                 'Responsável', 'Descrição', 'Responsavel pelo teste']].copy()
+                
+                # Reorganizar colunas para melhor visualização
+                colunas_prontas = ['Data', 'Sprint', 'Time', 'Nome da Task', 'Responsável', 
+                                 'Descrição', 'Responsavel pelo teste', 'Link da Task']
+                
+                df_prontas_exibir = df_prontas_detalhada[colunas_prontas].copy()
+                df_prontas_exibir['Data'] = df_prontas_exibir['Data'].dt.strftime('%d/%m/%Y')
+                
+                # Preencher descrições vazias
+                df_prontas_exibir['Descrição'] = df_prontas_exibir['Descrição'].fillna('Descrição não informada')
+                
+                st.dataframe(
+                    df_prontas_exibir,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Link da Task": st.column_config.LinkColumn(
+                            "Link da Task",
+                            help="Clique para abrir a task",
+                            display_text="🔗 Abrir Task"
+                        ),
+                        "Descrição": st.column_config.TextColumn(
+                            "Descrição",
+                            help="Descrição da tarefa pronta para publicação",
+                            width="large"
+                        )
+                    }
+                )
+                
+                # Botão para exportar dados de prontas
+                csv_prontas = df_prontas_exibir.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    label="📥 Exportar Tarefas Prontas para Publicação (CSV)",
+                    data=csv_prontas,
+                    file_name=f"tarefas_prontas_publicacao_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("Nenhuma tarefa pronta para publicação encontrada no período selecionado.")
+            
+            st.divider()
+            
+            # Seção 3: Detalhamento de Tarefas Rejeitadas
             if len(df_rejeitadas) > 0:
                 st.markdown("#### 🚫 Detalhamento de Tarefas Rejeitadas")
                 
                 # Criar tabela detalhada com descrição dos problemas
                 df_rejeitadas_detalhada = df_rejeitadas[['Data', 'Sprint', 'Time', 'Nome da Task', 'Link da Task', 
-                                                       'Responsável', 'Motivo', 'Motivo2', 'Motivo3', 'Responsavel pelo teste']].copy()
+                                                       'Responsável', 'Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7', 'Responsavel pelo teste']].copy()
                 
                 # Criar coluna de descrição consolidada
                 def criar_descricao_problema(row):
@@ -3043,6 +4232,14 @@ def main():
                         motivos.append(f"• {row['Motivo2'].strip()}")
                     if pd.notna(row['Motivo3']) and row['Motivo3'].strip():
                         motivos.append(f"• {row['Motivo3'].strip()}")
+                    if pd.notna(row['Motivo4']) and row['Motivo4'].strip():
+                        motivos.append(f"• {row['Motivo4'].strip()}")
+                    if pd.notna(row['Motivo5']) and row['Motivo5'].strip():
+                        motivos.append(f"• {row['Motivo5'].strip()}")
+                    if pd.notna(row['Motivo6']) and row['Motivo6'].strip():
+                        motivos.append(f"• {row['Motivo6'].strip()}")
+                    if pd.notna(row['Motivo7']) and row['Motivo7'].strip():
+                        motivos.append(f"• {row['Motivo7'].strip()}")
                     
                     if motivos:
                         return "\n".join(motivos)
@@ -3087,7 +4284,7 @@ def main():
             
             st.divider()
             
-            # Seção 3: Detalhamento de Tarefas com Erros
+            # Seção 4: Detalhamento de Tarefas com Erros
             if len(df_com_erros) > 0:
                 st.markdown("#### ⚠️ Detalhamento de Tarefas com Erros")
                 
@@ -3142,7 +4339,7 @@ def main():
             
             st.divider()
             
-            # Seção 4: Análise de Tendências
+            # Seção 5: Análise de Tendências
             st.markdown("#### 📊 Análise de Tendências")
             
             if len(df_pm) > 0:
@@ -3208,7 +4405,7 @@ def main():
                         else:
                             st.info("Dados insuficientes para análise temporal.")
             
-            # Seção 5: Recomendações
+            # Seção 6: Recomendações
             st.markdown("#### 💡 Recomendações para P.M.")
             
             if len(df_pm) > 0:
@@ -3231,7 +4428,7 @@ def main():
                 # Análise de motivos mais comuns
                 if len(df_rejeitadas) > 0:
                     motivos_todos = []
-                    for col in ['Motivo', 'Motivo2', 'Motivo3']:
+                    for col in ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']:
                         motivos_todos.extend(df_rejeitadas[col].dropna().tolist())
                     
                     if motivos_todos:
@@ -3243,20 +4440,145 @@ def main():
             else:
                 st.info("Nenhum dado disponível para análise com os filtros selecionados.")
             
-            st.markdown("""
-            ---
-            **💼 Sobre este Relatório:**
+        with tab8:
+            st.markdown("### 🌐 **Análise de Ambientes de Teste**")
+            st.markdown("*Distribuição e análise de testes por ambiente*")
             
-            Este relatório foi desenvolvido especificamente para fornecer à P.M. uma visão detalhada dos problemas encontrados nas tarefas, 
-            incluindo descrições específicas dos bugs e falhas. Os dados podem ser exportados em CSV para análises adicionais ou 
-            apresentações executivas.
+            # Botão de exportação PDF
+            col_export_amb, col_space_amb = st.columns([1, 3])
+            with col_export_amb:
+                botao_exportar_pdf("Analise_de_Ambientes", criar_pdf_generico, df_com_teste, df, df_sem_teste)
             
-            **📋 Como usar:**
-            1. Use os filtros no topo para focar em times, períodos ou status específicos
-            2. Analise as tabelas detalhadas para entender os problemas específicos
-            3. Exporte os dados em CSV para análises offline
-            4. Use as tendências e recomendações para tomada de decisão
-            """)
+            st.markdown("---")
+            
+            if 'Ambiente' in df_com_teste.columns:
+                # Verificar se há dados de ambiente válidos (não nulos e não vazios)
+                dados_ambiente = df_com_teste[df_com_teste['Ambiente'].notna() & (df_com_teste['Ambiente'].str.strip() != '')]
+                
+                if not dados_ambiente.empty:
+                    # Métricas principais de ambientes
+                    st.markdown("#### 📊 **Métricas de Ambientes**")
+                    
+                    col_amb1, col_amb2, col_amb3, col_amb4 = st.columns(4)
+                    
+                    with col_amb1:
+                        total_ambientes = dados_ambiente['Ambiente'].nunique()
+                        st.metric("🌐 Total de Ambientes", f"{total_ambientes}")
+                    
+                    with col_amb2:
+                        ambiente_mais_usado = dados_ambiente['Ambiente'].value_counts().index[0]
+                        st.metric("🏆 Ambiente Mais Usado", ambiente_mais_usado)
+                    
+                    with col_amb3:
+                        testes_com_ambiente = len(dados_ambiente)
+                        total_testes = len(df_com_teste)
+                        cobertura_ambiente = (testes_com_ambiente / total_testes * 100) if total_testes > 0 else 0
+                        st.metric("📊 Cobertura de Ambiente", f"{cobertura_ambiente:.1f}%")
+                    
+                    with col_amb4:
+                        if 'Status' in dados_ambiente.columns:
+                            rejeitadas_ambiente = len(dados_ambiente[dados_ambiente['Status'] == 'REJEITADA'])
+                            taxa_rejeicao_ambiente = (rejeitadas_ambiente / testes_com_ambiente * 100) if testes_com_ambiente > 0 else 0
+                            st.metric("⚠️ Taxa Rejeição", f"{taxa_rejeicao_ambiente:.1f}%")
+                    
+                    st.markdown("---")
+                    
+                    # Gráficos de análise de ambientes
+                    st.markdown("#### 📈 **Análise Visual de Ambientes**")
+                    
+                    col_graf_amb1, col_graf_amb2 = st.columns(2)
+                    
+                    with col_graf_amb1:
+                        # Gráfico de distribuição por ambiente
+                        fig_dist_amb = grafico_distribuicao_ambientes(dados_ambiente)
+                        if fig_dist_amb:
+                            st.plotly_chart(fig_dist_amb, use_container_width=True, key="distribuicao_ambientes")
+                    
+                    with col_graf_amb2:
+                        # Gráfico de status por ambiente
+                        fig_status_amb = grafico_ambiente_por_status(dados_ambiente)
+                        if fig_status_amb:
+                            st.plotly_chart(fig_status_amb, use_container_width=True, key="status_por_ambiente")
+                    
+                    st.markdown("---")
+                    
+                    # Tabela detalhada por ambiente
+                    st.markdown("#### 📋 **Detalhamento por Ambiente**")
+                    
+                    # Criar resumo por ambiente
+                    resumo_ambiente = dados_ambiente.groupby('Ambiente').agg({
+                        'Status': ['count', lambda x: (x == 'APROVADA').sum(), lambda x: (x == 'REJEITADA').sum(), lambda x: (x == 'PRONTO PARA PUBLICAÇÃO').sum()],
+                        'Time': 'nunique',
+                        'Responsavel pelo teste': 'nunique'
+                    }).round(2)
+                    
+                    resumo_ambiente.columns = ['Total_Testes', 'Aprovadas', 'Rejeitadas', 'Prontas', 'Times_Atendidos', 'Testadores']
+                    resumo_ambiente['Total_Aprovadas'] = resumo_ambiente['Aprovadas'] + resumo_ambiente['Prontas']
+                    resumo_ambiente['Taxa_Aprovacao'] = (resumo_ambiente['Total_Aprovadas'] / resumo_ambiente['Total_Testes'] * 100).round(1)
+                    resumo_ambiente['Taxa_Rejeicao'] = (resumo_ambiente['Rejeitadas'] / resumo_ambiente['Total_Testes'] * 100).round(1)
+                    
+                    resumo_ambiente = resumo_ambiente.reset_index()
+                    
+                    st.dataframe(
+                        resumo_ambiente,
+                        column_config={
+                            "Ambiente": "🌐 Ambiente",
+                            "Total_Testes": "📊 Total de Testes",
+                            "Aprovadas": "✅ Aprovadas",
+                            "Rejeitadas": "❌ Rejeitadas",
+                            "Times_Atendidos": "👥 Times Atendidos",
+                            "Testadores": "🧑‍💻 Testadores",
+                            "Taxa_Aprovacao": "📈 Taxa Aprovação (%)",
+                            "Taxa_Rejeicao": "📉 Taxa Rejeição (%)"
+                        },
+                        use_container_width=True
+                    )
+                    
+                    # Botão para exportar dados de ambientes
+                    csv_ambientes = resumo_ambiente.to_csv(index=False, encoding='utf-8-sig')
+                    st.download_button(
+                        label="📥 Exportar Análise de Ambientes (CSV)",
+                        data=csv_ambientes,
+                        file_name=f"analise_ambientes_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                        mime="text/csv"
+                    )
+                    
+                    st.markdown("---")
+                    
+                    # Insights sobre ambientes
+                    st.markdown("#### 💡 **Insights sobre Ambientes**")
+                    
+                    insights_ambiente = []
+                    
+                    # Ambiente com maior taxa de rejeição
+                    if not resumo_ambiente.empty:
+                        ambiente_problema = resumo_ambiente.loc[resumo_ambiente['Taxa_Rejeicao'].idxmax()]
+                        if ambiente_problema['Taxa_Rejeicao'] > 20:
+                            insights_ambiente.append(f"⚠️ **Ambiente {ambiente_problema['Ambiente']}** apresenta alta taxa de rejeição ({ambiente_problema['Taxa_Rejeicao']:.1f}%)")
+                        
+                        # Ambiente mais eficiente
+                        ambiente_eficiente = resumo_ambiente.loc[resumo_ambiente['Taxa_Aprovacao'].idxmax()]
+                        if ambiente_eficiente['Taxa_Aprovacao'] > 80:
+                            insights_ambiente.append(f"✅ **Ambiente {ambiente_eficiente['Ambiente']}** apresenta excelente taxa de aprovação ({ambiente_eficiente['Taxa_Aprovacao']:.1f}%)")
+                        
+                        # Cobertura de ambientes
+                        if cobertura_ambiente < 70:
+                            insights_ambiente.append(f"📊 **Baixa cobertura de ambientes**: Apenas {cobertura_ambiente:.1f}% dos testes têm ambiente especificado")
+                    
+                    if insights_ambiente:
+                        for insight in insights_ambiente:
+                            st.markdown(insight)
+                    else:
+                        st.info("✅ Não foram identificados problemas significativos na distribuição por ambientes.")
+                    
+                else:
+                    st.warning("⚠️ Nenhum dado de ambiente encontrado nos testes realizados.")
+                    st.info("💡 **Dica**: Certifique-se de que a coluna 'Ambiente' esteja preenchida na planilha para obter análises detalhadas.")
+            else:
+                st.error("❌ Coluna 'Ambiente' não encontrada na planilha.")
+                st.info("💡 **Solução**: Adicione uma coluna 'Ambiente' na sua planilha para habilitar esta análise.")
+        
+
     else:
         st.info("👆 Faça upload de um arquivo Excel para começar a análise")
         st.markdown("""
@@ -3271,6 +4593,10 @@ def main():
         - **Motivo**: Primeiro motivo (se rejeitada)
         - **Motivo2**: Segundo motivo (se rejeitada)
         - **Motivo3**: Terceiro motivo (se rejeitada)
+        - **Motivo4**: Quarto motivo (se rejeitada)
+        - **Motivo5**: Quinto motivo (se rejeitada)
+        - **Motivo6**: Sexto motivo (se rejeitada)
+        - **Motivo7**: Sétimo motivo (se rejeitada)
         - **Responsavel pelo teste**: Testador responsável
         - **ID**: Identificador único da task
         

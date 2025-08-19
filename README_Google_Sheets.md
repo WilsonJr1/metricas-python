@@ -62,6 +62,10 @@ A planilha deve conter as seguintes colunas:
 - Motivo
 - Motivo2
 - Motivo3
+- Motivo4
+- Motivo5
+- Motivo6
+- Motivo7
 - Responsavel pelo teste
 - ID
 - Erros

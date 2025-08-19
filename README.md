@@ -181,6 +181,10 @@ O dashboard espera um arquivo Excel com as seguintes colunas:
 - **Motivo**: Primeiro motivo (se rejeitada)
 - **Motivo2**: Segundo motivo (se rejeitada)
 - **Motivo3**: Terceiro motivo (se rejeitada)
+- **Motivo4**: Quarto motivo (se rejeitada)
+- **Motivo5**: Quinto motivo (se rejeitada)
+- **Motivo6**: Sexto motivo (se rejeitada)
+- **Motivo7**: Sétimo motivo (se rejeitada)
 - **Responsavel pelo teste**: Testador responsável
 - **ID**: Identificador único da task
 
