@@ -18,9 +18,11 @@ try:
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
     from reportlab.lib import colors
+    import kaleido
     PDF_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     PDF_AVAILABLE = False
+    print(f"Aviso: Bibliotecas PDF não disponíveis: {e}")
 
 # Importar módulo de sustentação
 try:
@@ -53,6 +55,13 @@ def exportar_grafico_para_pdf(fig, titulo, largura=800, altura=600):
         return None
     
     try:
+        # Verificar se kaleido está disponível
+        try:
+            import kaleido
+        except ImportError:
+            print(f"Erro: Kaleido não está instalado. Execute: pip install kaleido")
+            return None
+        
         # Verificar se o objeto fig tem o método to_image
         if not hasattr(fig, 'to_image'):
             print(f"Erro: Objeto '{titulo}' não é um gráfico Plotly válido")
@@ -63,32 +72,45 @@ def exportar_grafico_para_pdf(fig, titulo, largura=800, altura=600):
             plot_bgcolor='white',
             paper_bgcolor='white',
             font=dict(color='black'),
-            title_font_color='black'
+            title_font_color='black',
+            width=largura,
+            height=altura
         )
         
         # Atualizar eixos para garantir que sejam visíveis
         fig.update_xaxes(gridcolor='lightgray', linecolor='black', tickcolor='black')
         fig.update_yaxes(gridcolor='lightgray', linecolor='black', tickcolor='black')
             
-        # Tentar converter para imagem
-        img_bytes = fig.to_image(
-            format="png", 
-            width=largura, 
-            height=altura,
-            engine="kaleido"
-        )
+        # Tentar converter para imagem com diferentes engines
+        engines = ["kaleido", "orca"]
         
-        if img_bytes is None or len(img_bytes) == 0:
-            print(f"Erro: Imagem vazia gerada para '{titulo}'")
-            return None
-            
-        return img_bytes
+        for engine in engines:
+            try:
+                print(f"Tentando converter '{titulo}' com engine '{engine}'...")
+                img_bytes = fig.to_image(
+                    format="png", 
+                    width=largura, 
+                    height=altura,
+                    engine=engine
+                )
+                
+                if img_bytes and len(img_bytes) > 0:
+                    print(f"Sucesso: Gráfico '{titulo}' convertido com '{engine}'")
+                    return img_bytes
+                else:
+                    print(f"Aviso: Imagem vazia com engine '{engine}' para '{titulo}'")
+                    
+            except Exception as engine_error:
+                print(f"Erro com engine '{engine}' para '{titulo}': {engine_error}")
+                continue
         
-    except ImportError as e:
-        print(f"Erro de dependência para '{titulo}': {e}. Instale: pip install kaleido")
+        print(f"Erro: Falha ao converter '{titulo}' com todos os engines disponíveis")
         return None
+        
     except Exception as e:
-        print(f"Erro ao converter gráfico '{titulo}': {e}")
+        print(f"Erro geral ao converter gráfico '{titulo}': {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
@@ -313,7 +335,9 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
     prontas = len(df_filtrado[df_filtrado['Status'] == 'PRONTO PARA PUBLICAÇÃO']) if 'Status' in df_filtrado.columns else 0
     total_aprovadas = aprovadas + prontas
     rejeitadas = len(df_filtrado[df_filtrado['Status'] == 'REJEITADA']) if 'Status' in df_filtrado.columns else 0
-    em_andamento = len(df_filtrado[df_filtrado['Status'].isin(['EM ANDAMENTO', 'PENDENTE'])]) if 'Status' in df_filtrado.columns else 0
+    # Calcular tarefas retestadas
+    historico_retestes = analisar_historico_retestes(df_filtrado)
+    tarefas_retestadas = historico_retestes['total_tarefas_retestadas']
     taxa_aprovacao = (total_aprovadas/(total_aprovadas + rejeitadas)*100) if (total_aprovadas + rejeitadas) > 0 else 0
     taxa_rejeicao = (rejeitadas/total_tasks*100) if total_tasks > 0 else 0
     
@@ -342,7 +366,7 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
         ['Total de Testes Realizados', f'{total_tasks}', 'OK', 'Crescente'],
         ['Tarefas Aprovadas', f'{aprovadas}', 'OK', 'Positiva'],
         ['Tarefas Rejeitadas', f'{rejeitadas}', 'OK', 'Controlada'],
-        ['Em Andamento/Pendente', f'{em_andamento}', 'OK', 'Monitorar'],
+        ['Tarefas Retestadas', f'{tarefas_retestadas}', 'OK', 'Controlada'],
         ['Taxa de Aprovação', f'{taxa_aprovacao:.1f}%', 'OK', 'Excelente' if taxa_aprovacao >= 80 else 'Boa' if taxa_aprovacao >= 60 else 'Crítica'],
         ['Taxa de Rejeição', f'{taxa_rejeicao:.1f}%', 'OK', 'Baixa' if taxa_rejeicao <= 20 else 'Alta'],
         ['Times Envolvidos', f'{times_unicos}', 'OK', 'Engajados'],
@@ -477,19 +501,21 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
     except Exception as e:
         story.append(Paragraph(f"Erro ao gerar gráfico por time: {e}", styles['Normal']))
     
-    # Gráfico de evolução da qualidade
+
+    
+    # Gráfico de tarefas retestadas
     try:
-        fig_evolucao = grafico_evolucao_qualidade(df_filtrado, por_ambiente=False)
-        if fig_evolucao:
-            img_bytes = exportar_grafico_para_pdf(fig_evolucao, "Evolução da Qualidade")
+        fig_retestadas = grafico_tarefas_retestadas(df_filtrado)
+        if fig_retestadas:
+            img_bytes = exportar_grafico_para_pdf(fig_retestadas, "Tarefas Retestadas")
             if img_bytes:
                 img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
-                story.append(Paragraph("Evolução da Qualidade ao Longo do Tempo", chart_title_style))
+                story.append(Paragraph("Histórico de Tarefas Retestadas", chart_title_style))
                 story.append(img)
                 story.append(Spacer(1, 30))
     except Exception as e:
-        story.append(Paragraph(f"Erro ao gerar gráfico de evolução: {e}", styles['Normal']))
-    
+        story.append(Paragraph(f"Erro ao gerar gráfico de tarefas retestadas: {e}", styles['Normal']))
+
     # Gráfico de motivos de rejeição
     try:
         fig_motivos = grafico_motivos_rejeicao(df_filtrado, por_ambiente=False)
@@ -503,31 +529,9 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
     except Exception as e:
         story.append(Paragraph(f"Erro ao gerar gráfico de motivos: {e}", styles['Normal']))
     
-    # Gráfico de timeline de tarefas
-    try:
-        fig_timeline = grafico_timeline_tasks(df_filtrado)
-        if fig_timeline:
-            img_bytes = exportar_grafico_para_pdf(fig_timeline, "Timeline de Tarefas")
-            if img_bytes:
-                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
-                story.append(Paragraph("Timeline de Execução das Tarefas", styles['Heading3']))
-                story.append(img)
-                story.append(Spacer(1, 20))
-    except Exception as e:
-        story.append(Paragraph(f"Erro ao gerar timeline: {e}", styles['Normal']))
+
     
-    # Gráfico comparativo de testadores
-    try:
-        fig_testadores = grafico_comparativo_testadores(df_filtrado)
-        if fig_testadores:
-            img_bytes = exportar_grafico_para_pdf(fig_testadores, "Comparativo de Testadores")
-            if img_bytes:
-                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
-                story.append(Paragraph("Performance Comparativa dos Testadores", styles['Heading3']))
-                story.append(img)
-                story.append(Spacer(1, 20))
-    except Exception as e:
-        story.append(Paragraph(f"Erro ao gerar comparativo de testadores: {e}", styles['Normal']))
+
     
     # Gráfico de ranking de problemas
     try:
@@ -558,7 +562,7 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
     story.append(Spacer(1, 15))
     
     # 6. TAREFAS ENTREGUES E PRODUÇÃO
-    story.append(Paragraph("5. TAREFAS ENTREGUES E PRODUÇÃO", subtitle_style))
+    story.append(Paragraph("5. TAREFAS ENTREGUES EM PRODUÇÃO", subtitle_style))
     
     # Filtrar tarefas aprovadas
     df_aprovadas = df_filtrado[df_filtrado['Status'] == 'APROVADA'].copy()
@@ -571,7 +575,9 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
         
         for _, row in df_aprovadas.head(20).iterrows():  # Limitar a 20 registros para não sobrecarregar o PDF
             nome_task = str(row.get('Nome da Task', 'N/A'))[:60]
-            descricao = str(row.get('Descrição', 'N/A'))[:80]
+            descricao_raw = str(row.get('Descrição', 'N/A'))
+            # Usar Paragraph para quebra automática de linha
+            descricao = Paragraph(descricao_raw, ParagraphStyle('CellStyle', parent=styles['Normal'], fontSize=8, wordWrap='CJK'))
             
             aprovadas_data.append([nome_task, descricao])
         
@@ -615,7 +621,9 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
         
         for _, row in df_prontas.head(20).iterrows():  # Limitar a 20 registros
             nome_task = str(row.get('Nome da Task', 'N/A'))[:60]
-            descricao = str(row.get('Descrição', 'N/A'))[:80]
+            descricao_raw = str(row.get('Descrição', 'N/A'))
+            # Usar Paragraph para quebra automática de linha
+            descricao = Paragraph(descricao_raw, ParagraphStyle('CellStyle', parent=styles['Normal'], fontSize=8, wordWrap='CJK'))
             
             prontas_data.append([nome_task, descricao])
         
@@ -645,16 +653,7 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
     
     story.append(Spacer(1, 15))
     
-    # 8. CONCLUSÕES
-    story.append(Paragraph("7. CONCLUSÕES", subtitle_style))
-    
-    conclusao_texto = f"""
-    Com base na análise dos dados apresentados, observamos que o processo de qualidade está 
-    {'em excelente estado' if taxa_aprovacao >= 80 else 'funcionando adequadamente' if taxa_aprovacao >= 60 else 'necessitando de melhorias urgentes'}.
-    """
-    
-    story.append(Paragraph(conclusao_texto, normal_enhanced))
-    story.append(Spacer(1, 15))
+
     
 
     
@@ -1521,7 +1520,7 @@ def grafico_status_distribuicao(df_filtrado):
         color_map = {
             'APROVADA': '#28a745',  # Verde para aprovada
             'REJEITADA': '#dc3545',  # Vermelho para rejeitada
-            'PRONTO PARA PUBLICAÇÃO': '#2E7D32'  # Verde para pronto
+            'PRONTO PARA PUBLICAÇÃO': '#1976D2'  # Azul para pronto
         }
         
         # Criar lista de cores baseada nos status presentes
@@ -2306,6 +2305,51 @@ def grafico_ranking_aprovadas_por_dev(df_filtrado):
                 return fig
     return None
 
+def grafico_tarefas_retestadas(df_filtrado):
+    """Gráfico de tarefas que tiveram mais de 1 teste"""
+    historico_retestes = analisar_historico_retestes(df_filtrado)
+    
+    if historico_retestes['total_tarefas_retestadas'] == 0:
+        return None
+    
+    df_retestes = historico_retestes['detalhes_retestes']
+    if df_retestes.empty:
+        return None
+    
+    # Agrupar por time se disponível
+    if 'Time' in df_retestes.columns:
+        retestes_por_time = df_retestes.groupby('Time').agg({
+            'Total_Testes': 'sum',
+            'Aprovada_Apos_Reteste': 'sum'
+        }).reset_index()
+        
+        retestes_por_time['Taxa_Sucesso'] = (
+            retestes_por_time['Aprovada_Apos_Reteste'] / 
+            retestes_por_time['Total_Testes'] * 100
+        ).round(1)
+        
+        fig = px.bar(
+            retestes_por_time,
+            x='Time',
+            y='Total_Testes',
+            title="🔄 Tarefas Retestadas por Time",
+            labels={'Time': 'Time', 'Total_Testes': 'Quantidade de Retestes'},
+            text='Total_Testes',
+            color='Taxa_Sucesso',
+            color_continuous_scale=['#FF6B6B', '#4ECDC4', '#45B7D1']
+        )
+        
+        fig.update_traces(textposition='outside', textfont_size=12)
+        fig.update_layout(
+            margin=dict(t=50, b=120, l=80, r=80),
+            height=450,
+            xaxis_tickangle=45,
+            showlegend=False
+        )
+        return fig
+    
+    return None
+
 def grafico_tarefas_retestadas_por_dev(df_filtrado):
     """Gráfico de quantidade de tarefas retestadas por desenvolvedor"""
     if 'Responsável' in df_filtrado.columns and 'Status' in df_filtrado.columns:
@@ -2922,6 +2966,12 @@ def main():
                 fig_taxa_rejeicao = grafico_taxa_rejeicao_por_time(df_com_teste)
                 if fig_taxa_rejeicao:
                     st.plotly_chart(fig_taxa_rejeicao, use_container_width=True, key="taxa_rejeicao_exec")
+            
+            # Gráfico de tarefas retestadas (nova seção)
+            st.markdown("#### 🔄 **Análise de Retestes**")
+            fig_retestadas = grafico_tarefas_retestadas(df_com_teste)
+            if fig_retestadas:
+                st.plotly_chart(fig_retestadas, use_container_width=True, key="tarefas_retestadas_exec")
             
             st.markdown("---")
             
