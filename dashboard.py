@@ -91,9 +91,9 @@ def exportar_grafico_para_pdf(fig, titulo, largura=800, altura=600):
         print(f"Erro ao converter gráfico '{titulo}': {e}")
         return None
 
-def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
+def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
     """
-    Cria um PDF completo e detalhado do relatório PM com insights e análises
+    Cria um PDF completo e detalhado do relatório com insights e análises
     """
     if not PDF_AVAILABLE:
         st.error("📄 Bibliotecas PDF não disponíveis. Instale: pip install reportlab kaleido")
@@ -218,38 +218,46 @@ def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
         alignment=1
     )
     
-    # Cabeçalho do relatório com design profissional e logo
+    # Cabeçalho do relatório com design profissional
     from reportlab.platypus import HRFlowable
     from reportlab.graphics.shapes import Drawing, Rect, Polygon
     from reportlab.graphics import renderPDF
     
-    # Criar logo da Delfinance usando apenas texto
+    # Criar logo da Delfinance com formatação profissional
     from reportlab.platypus import Paragraph
-    logo_text = Paragraph("<font color='#00C851' size='16'><b>delfinance</b></font>", styles['Normal'])
     
-    # Criar tabela para cabeçalho com logo e título
-    header_content = [[
-        logo_text,
-        Paragraph("📊 RELATÓRIO EXECUTIVO DE QUALIDADE", title_style)
-    ]]
+    # Estilo profissional para o cabeçalho
+    header_style = ParagraphStyle(
+        'HeaderStyle',
+        parent=styles['Normal'],
+        fontSize=20,
+        fontName='Times-Bold',
+        alignment=1,  # Centralizado
+        spaceAfter=15,
+        textColor=colors.black
+    )
     
-    header_logo_table = Table(header_content, colWidths=[1.5*inch, 5.5*inch])
-    header_logo_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-        ('ALIGN', (1, 0), (1, 0), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('TOPPADDING', (0, 0), (-1, -1), 5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-    ]))
+    # Logo Delfinance com cores específicas
+    logo_style = ParagraphStyle(
+        'LogoStyle',
+        parent=styles['Normal'],
+        fontSize=18,
+        fontName='Times-Bold',
+        alignment=1,  # Centralizado
+        spaceAfter=15
+    )
     
-    story.append(header_logo_table)
-    story.append(Spacer(1, 10))
+    # Criar cabeçalho centralizado
+    logo_text = Paragraph("<font color='#00C851'>Del</font><font color='black'>finance</font>", logo_style)
+    title_text = Paragraph("RELATÓRIO DETALHADO", header_style)
+    
+    story.append(logo_text)
+    story.append(title_text)
+    story.append(Spacer(1, 30))
     
     # Linha decorativa
     story.append(HRFlowable(width="100%", thickness=2, color=cor_primaria))
-    story.append(Spacer(1, 15))
+    story.append(Spacer(1, 30))
     
     # Calcular período baseado nos dados filtrados
     if len(df_filtrado) > 0 and 'Data' in df_filtrado.columns:
@@ -296,7 +304,7 @@ def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
     ]))
     
     story.append(header_table)
-    story.append(Spacer(1, 30))
+    story.append(Spacer(1, 15))
     
     # Calcular métricas detalhadas
     total_tasks = len(df_filtrado)
@@ -330,18 +338,18 @@ def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
     # Tabela de métricas principais com design profissional
     metricas_data = [
         ['MÉTRICA', 'VALOR', 'INDICADOR', 'TENDÊNCIA'],
-        ['Total de Tarefas Únicas', f'{tasks_unicas}', '📊', 'Estável'],
-        ['Total de Testes Realizados', f'{total_tasks}', '🔍', 'Crescente'],
-        ['Tarefas Aprovadas', f'{aprovadas}', '✅', 'Positiva'],
-        ['Tarefas Rejeitadas', f'{rejeitadas}', '❌', 'Controlada'],
-        ['Em Andamento/Pendente', f'{em_andamento}', '⏳', 'Monitorar'],
-        ['Taxa de Aprovação', f'{taxa_aprovacao:.1f}%', '📈', 'Excelente' if taxa_aprovacao >= 80 else 'Boa' if taxa_aprovacao >= 60 else 'Crítica'],
-        ['Taxa de Rejeição', f'{taxa_rejeicao:.1f}%', '📉', 'Baixa' if taxa_rejeicao <= 20 else 'Alta'],
-        ['Times Envolvidos', f'{times_unicos}', '👥', 'Engajados'],
-        ['Testadores Ativos', f'{testadores_unicos}', '🧪', 'Produtivos']
+        ['Total de Tarefas Únicas', f'{tasks_unicas}', 'OK', 'Estável'],
+        ['Total de Testes Realizados', f'{total_tasks}', 'OK', 'Crescente'],
+        ['Tarefas Aprovadas', f'{aprovadas}', 'OK', 'Positiva'],
+        ['Tarefas Rejeitadas', f'{rejeitadas}', 'OK', 'Controlada'],
+        ['Em Andamento/Pendente', f'{em_andamento}', 'OK', 'Monitorar'],
+        ['Taxa de Aprovação', f'{taxa_aprovacao:.1f}%', 'OK', 'Excelente' if taxa_aprovacao >= 80 else 'Boa' if taxa_aprovacao >= 60 else 'Crítica'],
+        ['Taxa de Rejeição', f'{taxa_rejeicao:.1f}%', 'OK', 'Baixa' if taxa_rejeicao <= 20 else 'Alta'],
+        ['Times Envolvidos', f'{times_unicos}', 'OK', 'Engajados'],
+        ['Testadores Ativos', f'{testadores_unicos}', 'OK', 'Produtivos']
     ]
     
-    metricas_table = Table(metricas_data, colWidths=[2.2*inch, 1.0*inch, 0.8*inch, 1.5*inch])
+    metricas_table = Table(metricas_data, colWidths=[2.2*inch, 1.0*inch, 1.2*inch, 1.3*inch])
     metricas_table.setStyle(TableStyle([
         # Cabeçalho com design profissional
         ('BACKGROUND', (0, 0), (-1, 0), cor_primaria),
@@ -375,35 +383,35 @@ def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
     ]))
     
     story.append(metricas_table)
-    story.append(Spacer(1, 30))
+    story.append(Spacer(1, 15))
     
     # 2. INSIGHTS E ANÁLISES CRÍTICAS
     story.append(Paragraph("2. INSIGHTS E ANÁLISES CRÍTICAS", subtitle_style))
     
     # Análise da taxa de aprovação
     if taxa_aprovacao >= 80:
-        insight_aprovacao = "✅ EXCELENTE: Taxa de aprovação acima de 80% indica alta qualidade nas entregas."
+        insight_aprovacao = "[+] EXCELENTE: Taxa de aprovação acima de 80% indica alta qualidade nas entregas."
         story.append(Paragraph(insight_aprovacao, insight_style_positivo))
     elif taxa_aprovacao >= 60:
-        insight_aprovacao = "⚠️ BOM: Taxa de aprovação entre 60-80% é aceitável, mas há espaço para melhorias."
+        insight_aprovacao = "[!] BOM: Taxa de aprovação entre 60-80% é aceitável, mas há espaço para melhorias."
         story.append(Paragraph(insight_aprovacao, insight_style_neutro))
     else:
-        insight_aprovacao = "🚨 CRÍTICO: Taxa de aprovação abaixo de 60% requer ação imediata."
+        insight_aprovacao = "[X] CRÍTICO: Taxa de aprovação abaixo de 60% requer ação imediata."
         story.append(Paragraph(insight_aprovacao, insight_style_negativo))
     
     # Análise de distribuição de trabalho
     if 'Time' in df_filtrado.columns:
         time_mais_ativo = df_filtrado['Time'].value_counts().index[0] if len(df_filtrado) > 0 else 'N/A'
         tasks_time_ativo = df_filtrado['Time'].value_counts().iloc[0] if len(df_filtrado) > 0 else 0
-        story.append(Paragraph(f"📊 DISTRIBUIÇÃO: Time '{time_mais_ativo}' é o mais ativo com {tasks_time_ativo} testes realizados.", insight_style_positivo))
+        story.append(Paragraph(f"[*] DISTRIBUIÇÃO: Time '{time_mais_ativo}' é o mais ativo com {tasks_time_ativo} testes realizados.", insight_style_positivo))
     
     # Análise de testadores
     if 'Responsavel pelo teste' in df_filtrado.columns:
         testador_mais_ativo = df_filtrado['Responsavel pelo teste'].value_counts().index[0] if len(df_filtrado) > 0 else 'N/A'
         tests_testador = df_filtrado['Responsavel pelo teste'].value_counts().iloc[0] if len(df_filtrado) > 0 else 0
-        story.append(Paragraph(f"🧪 PERFORMANCE: Testador '{testador_mais_ativo}' realizou {tests_testador} testes, sendo o mais produtivo.", insight_style_positivo))
+        story.append(Paragraph(f"[>] PERFORMANCE: Testador '{testador_mais_ativo}' realizou {tests_testador} testes, sendo o mais produtivo.", insight_style_positivo))
     
-    story.append(Spacer(1, 20))
+    story.append(Spacer(1, 10))
     
     # 3. ANÁLISE DETALHADA POR TIMES
     story.append(Paragraph("3. ANÁLISE DETALHADA POR TIMES", subtitle_style))
@@ -438,7 +446,7 @@ def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
             
             story.append(performance_table)
     
-    story.append(Spacer(1, 30))
+    story.append(Spacer(1, 15))
     
     # 4. GRÁFICOS E VISUALIZAÇÕES
     story.append(Paragraph("4. GRÁFICOS E VISUALIZAÇÕES", subtitle_style))
@@ -452,7 +460,7 @@ def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
                 img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
                 story.append(Paragraph("Distribuição por Status", chart_title_style))
                 story.append(img)
-                story.append(Spacer(1, 15))
+                story.append(Spacer(1, 30))
     except Exception as e:
         story.append(Paragraph(f"Erro ao gerar gráfico de status: {e}", styles['Normal']))
 
@@ -465,7 +473,7 @@ def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
                 img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
                 story.append(Paragraph("Tarefas por Time", chart_title_style))
                 story.append(img)
-                story.append(Spacer(1, 15))
+                story.append(Spacer(1, 30))
     except Exception as e:
         story.append(Paragraph(f"Erro ao gerar gráfico por time: {e}", styles['Normal']))
     
@@ -478,7 +486,7 @@ def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
                 img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
                 story.append(Paragraph("Evolução da Qualidade ao Longo do Tempo", chart_title_style))
                 story.append(img)
-                story.append(Spacer(1, 15))
+                story.append(Spacer(1, 30))
     except Exception as e:
         story.append(Paragraph(f"Erro ao gerar gráfico de evolução: {e}", styles['Normal']))
     
@@ -543,15 +551,11 @@ def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
                 img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
                 story.append(Paragraph("Taxa de Rejeição por Time de Desenvolvimento", styles['Heading3']))
                 story.append(img)
-                story.append(Spacer(1, 20))
+                story.append(Spacer(1, 10))
     except Exception as e:
         story.append(Paragraph(f"Erro ao gerar taxa de rejeição por time: {e}", styles['Normal']))
     
-    story.append(Spacer(1, 30))
-    
-
-    
-
+    story.append(Spacer(1, 15))
     
     # 6. TAREFAS ENTREGUES E PRODUÇÃO
     story.append(Paragraph("5. TAREFAS ENTREGUES E PRODUÇÃO", subtitle_style))
@@ -595,7 +599,7 @@ def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
     else:
         story.append(Paragraph("Nenhuma tarefa aprovada encontrada no período.", insight_style_neutro))
     
-    story.append(Spacer(1, 20))
+    story.append(Spacer(1, 10))
     
     # 7. TAREFAS PRONTAS PARA PUBLICAÇÃO
     story.append(Paragraph("6. TAREFAS PRONTAS PARA PUBLICAÇÃO", subtitle_style))
@@ -639,7 +643,7 @@ def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
     else:
         story.append(Paragraph("Nenhuma tarefa pronta para publicação encontrada no período.", insight_style_neutro))
     
-    story.append(Spacer(1, 30))
+    story.append(Spacer(1, 15))
     
     # 8. CONCLUSÕES
     story.append(Paragraph("7. CONCLUSÕES", subtitle_style))
@@ -663,8 +667,8 @@ def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
     # Informações do rodapé simplificado
     from datetime import datetime
     footer_data = [
-        ['📅 Data de Geração:', datetime.now().strftime('%d/%m/%Y às %H:%M')],
-        ['🔒 Confidencialidade:', 'Documento Interno - Uso Restrito']
+        ['Data de Geração:', datetime.now().strftime('%d/%m/%Y às %H:%M')],
+        ['Confidencialidade:', 'Documento Interno - Uso Restrito']
     ]
     
     footer_table = Table(footer_data, colWidths=[2.0*inch, 4.0*inch])
@@ -683,7 +687,7 @@ def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
     ]))
     
     story.append(footer_table)
-    story.append(Spacer(1, 8))
+    story.append(Spacer(1, 15))
     
     # Assinatura digital
     assinatura_style = ParagraphStyle(
@@ -695,7 +699,7 @@ def criar_pdf_relatorio_pm(df_filtrado, df_original, df_sem_teste=None):
         alignment=1
     )
     
-    story.append(Paragraph("🔐 Relatório gerado automaticamente pelo sistema de métricas DelTech", assinatura_style))
+    story.append(Paragraph("Relatório gerado automaticamente pelo sistema de métricas DelTech", assinatura_style))
     story.append(Paragraph("© 2025 DelTech - Todos os direitos reservados", assinatura_style))
     
     # Construir PDF
@@ -726,7 +730,7 @@ def criar_pdf_visao_geral(df_filtrado, df_original, df_sem_teste=None):
     )
     story.append(Paragraph("Visão Geral Estratégica - QA", title_style))
     story.append(Paragraph(f"Data: {date.today().strftime('%d/%m/%Y')}", styles['Normal']))
-    story.append(Spacer(1, 20))
+    story.append(Spacer(1, 10))
     
     # Métricas principais
     story.append(Paragraph("Principais Indicadores", styles['Heading2']))
@@ -763,7 +767,7 @@ def criar_pdf_visao_geral(df_filtrado, df_original, df_sem_teste=None):
     ]))
     
     story.append(metricas_table)
-    story.append(Spacer(1, 30))
+    story.append(Spacer(1, 15))
     
     # Adicionar gráficos principais
     story.append(Paragraph("Análise Visual", styles['Heading2']))
@@ -777,7 +781,7 @@ def criar_pdf_visao_geral(df_filtrado, df_original, df_sem_teste=None):
                 img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
                 story.append(Paragraph("Evolução da Qualidade", styles['Heading3']))
                 story.append(img)
-                story.append(Spacer(1, 20))
+                story.append(Spacer(1, 10))
     except Exception as e:
         story.append(Paragraph(f"Erro ao gerar gráfico de evolução: {e}", styles['Normal']))
     
@@ -809,12 +813,12 @@ def criar_pdf_generico(titulo, df_filtrado, graficos_funcoes=None):
     )
     story.append(Paragraph(titulo, title_style))
     story.append(Paragraph(f"Data: {date.today().strftime('%d/%m/%Y')}", styles['Normal']))
-    story.append(Spacer(1, 20))
+    story.append(Spacer(1, 10))
     
     # Informações básicas
     story.append(Paragraph("Resumo dos Dados", styles['Heading2']))
     story.append(Paragraph(f"Total de registros analisados: {len(df_filtrado)}", styles['Normal']))
-    story.append(Spacer(1, 20))
+    story.append(Spacer(1, 10))
     
     # Adicionar gráficos se fornecidos
     if graficos_funcoes:
@@ -828,7 +832,7 @@ def criar_pdf_generico(titulo, df_filtrado, graficos_funcoes=None):
                         img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
                         story.append(Paragraph(nome_grafico, styles['Heading3']))
                         story.append(img)
-                        story.append(Spacer(1, 20))
+                        story.append(Spacer(1, 10))
             except Exception as e:
                 story.append(Paragraph(f"Erro ao gerar {nome_grafico}: {e}", styles['Normal']))
     
@@ -932,6 +936,84 @@ def contar_bugs_por_time(df_rejeitadas):
                     bugs_por_time[time] += 1
     
     return pd.Series(bugs_por_time).sort_values(ascending=False)
+
+def analisar_historico_retestes(df):
+    """Analisa o histórico de retestes das tarefas baseado no ID ou Nome da Task"""
+    if df.empty:
+        return {
+            'total_tarefas_retestadas': 0,
+            'tarefas_aprovadas_apos_reteste': 0,
+            'taxa_aprovacao_apos_reteste': 0,
+            'detalhes_retestes': pd.DataFrame()
+        }
+    
+    # Usar ID como identificador principal, Nome da Task como fallback
+    identificador = 'ID' if 'ID' in df.columns and df['ID'].notna().any() else 'Nome da Task'
+    
+    if identificador not in df.columns:
+        return {
+            'total_tarefas_retestadas': 0,
+            'tarefas_aprovadas_apos_reteste': 0,
+            'taxa_aprovacao_apos_reteste': 0,
+            'detalhes_retestes': pd.DataFrame()
+        }
+    
+    # Ordenar por identificador e data para análise temporal
+    df_sorted = df.sort_values([identificador, 'Data']).copy()
+    
+    # Agrupar por identificador para analisar histórico
+    historico_tarefas = []
+    tarefas_retestadas = set()
+    tarefas_aprovadas_apos_reteste = set()
+    
+    for task_id, group in df_sorted.groupby(identificador):
+        if len(group) > 1:  # Tarefa testada mais de uma vez
+            group_sorted = group.sort_values('Data')
+            status_sequence = group_sorted['Status'].tolist()
+            
+            # Verificar se houve rejeição seguida de aprovação
+            teve_rejeicao = any(status in ['REJEITADA'] for status in status_sequence)
+            teve_aprovacao = any(status in ['APROVADA', 'PRONTO PARA PUBLICAÇÃO'] for status in status_sequence)
+            
+            if teve_rejeicao:
+                tarefas_retestadas.add(task_id)
+                
+                # Verificar se foi aprovada após rejeição
+                for i, status in enumerate(status_sequence):
+                    if status == 'REJEITADA' and i < len(status_sequence) - 1:
+                        # Verificar se há aprovação após esta rejeição
+                        status_posteriores = status_sequence[i+1:]
+                        if any(s in ['APROVADA', 'PRONTO PARA PUBLICAÇÃO'] for s in status_posteriores):
+                            tarefas_aprovadas_apos_reteste.add(task_id)
+                            break
+                
+                # Adicionar detalhes do histórico
+                historico_tarefas.append({
+                    'Identificador': task_id,
+                    'Nome_Tarefa': group_sorted['Nome da Task'].iloc[0] if 'Nome da Task' in group_sorted.columns else '',
+                    'Total_Testes': len(group_sorted),
+                    'Sequencia_Status': ' → '.join(status_sequence),
+                    'Aprovada_Apos_Reteste': task_id in tarefas_aprovadas_apos_reteste,
+                    'Primeira_Data': group_sorted['Data'].iloc[0],
+                    'Ultima_Data': group_sorted['Data'].iloc[-1],
+                    'Time': group_sorted['Time'].iloc[0] if 'Time' in group_sorted.columns else '',
+                    'Responsavel': group_sorted['Responsável'].iloc[0] if 'Responsável' in group_sorted.columns else ''
+                })
+    
+    # Calcular métricas
+    total_retestadas = len(tarefas_retestadas)
+    total_aprovadas_apos_reteste = len(tarefas_aprovadas_apos_reteste)
+    taxa_aprovacao_apos_reteste = (total_aprovadas_apos_reteste / total_retestadas * 100) if total_retestadas > 0 else 0
+    
+    # Criar DataFrame com detalhes
+    df_detalhes = pd.DataFrame(historico_tarefas)
+    
+    return {
+        'total_tarefas_retestadas': total_retestadas,
+        'tarefas_aprovadas_apos_reteste': total_aprovadas_apos_reteste,
+        'taxa_aprovacao_apos_reteste': taxa_aprovacao_apos_reteste,
+        'detalhes_retestes': df_detalhes
+    }
 
 def contar_total_bugs(df_rejeitadas):
     """Conta o total de bugs considerando Motivo, Motivo2, Motivo3, Motivo4, Motivo5, Motivo6 e Motivo7"""
@@ -2157,6 +2239,99 @@ def grafico_motivos_recusa_por_dev(df_filtrado):
                 return fig
     return None
 
+def grafico_cobertura_testes_por_dev(df_filtrado):
+    """Gráfico de cobertura de testes por desenvolvedor"""
+    if 'Responsável' in df_filtrado.columns and 'Status' in df_filtrado.columns:
+        dev_stats = df_filtrado.groupby('Responsável').agg({
+            'Status': ['count', lambda x: (x.isin(['APROVADA', 'REJEITADA', 'PRONTO PARA PUBLICAÇÃO'])).sum()]
+        }).round(1)
+        
+        dev_stats.columns = ['Total_Tasks', 'Tasks_Testadas']
+        dev_stats['Cobertura_Percentual'] = (dev_stats['Tasks_Testadas'] / dev_stats['Total_Tasks'] * 100).round(1)
+        dev_stats = dev_stats[dev_stats['Total_Tasks'] >= 3].sort_values('Cobertura_Percentual', ascending=False).head(10)
+        dev_stats = dev_stats.reset_index()
+        
+        if not dev_stats.empty:
+            fig = px.bar(
+                dev_stats,
+                x='Responsável',
+                y='Cobertura_Percentual',
+                title="📊 Cobertura de Testes por Desenvolvedor (min. 3 tasks)",
+                labels={'Responsável': 'Desenvolvedor', 'Cobertura_Percentual': 'Cobertura (%)'},
+                text='Cobertura_Percentual',
+                color='Cobertura_Percentual',
+                color_continuous_scale=['#FF6B6B', '#FFA726', '#4ECDC4'],
+                hover_data={'Tasks_Testadas': True, 'Total_Tasks': True}
+            )
+            
+            fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig.update_layout(
+                margin=dict(t=50, b=150, l=80, r=80),
+                height=550,
+                xaxis_tickangle=45,
+                yaxis=dict(range=[0, 100])
+            )
+            return fig
+    return None
+
+def grafico_ranking_aprovadas_por_dev(df_filtrado):
+    """Gráfico de ranking de desenvolvedores com mais tarefas aprovadas"""
+    if 'Status' in df_filtrado.columns and 'Responsável' in df_filtrado.columns:
+        df_aprovadas = df_filtrado[df_filtrado['Status'].isin(['APROVADA', 'PRONTO PARA PUBLICAÇÃO'])]
+        
+        if not df_aprovadas.empty:
+            aprovadas_por_dev = df_aprovadas['Responsável'].value_counts().head(10)
+            
+            if not aprovadas_por_dev.empty:
+                fig = px.bar(
+                    x=aprovadas_por_dev.index,
+                    y=aprovadas_por_dev.values,
+                    title="🏆 Ranking: Desenvolvedores com Mais Tarefas Aprovadas",
+                    labels={'x': 'Desenvolvedor', 'y': 'Tarefas Aprovadas'},
+                    text=aprovadas_por_dev.values,
+                    color=aprovadas_por_dev.values,
+                    color_continuous_scale=['#4ECDC4', '#45B7D1', '#2ECC71']
+                )
+                
+                fig.update_traces(textposition='outside', textfont_size=12)
+                fig.update_layout(
+                    margin=dict(t=50, b=150, l=80, r=80),
+                    height=550,
+                    xaxis_tickangle=45,
+                    showlegend=False
+                )
+                return fig
+    return None
+
+def grafico_tarefas_retestadas_por_dev(df_filtrado):
+    """Gráfico de quantidade de tarefas retestadas por desenvolvedor"""
+    if 'Responsável' in df_filtrado.columns and 'Status' in df_filtrado.columns:
+        df_retestadas = df_filtrado[df_filtrado['Status'] == 'REJEITADA']
+        
+        if not df_retestadas.empty:
+            retestadas_por_dev = df_retestadas['Responsável'].value_counts().head(10)
+            
+            if not retestadas_por_dev.empty:
+                fig = px.bar(
+                    x=retestadas_por_dev.index,
+                    y=retestadas_por_dev.values,
+                    title="🔄 Quantidade de Tarefas Retestadas por Desenvolvedor",
+                    labels={'x': 'Desenvolvedor', 'y': 'Tarefas Retestadas'},
+                    text=retestadas_por_dev.values,
+                    color=retestadas_por_dev.values,
+                    color_continuous_scale=['#FFA726', '#FF7043', '#FF5722']
+                )
+                
+                fig.update_traces(textposition='outside', textfont_size=12)
+                fig.update_layout(
+                    margin=dict(t=50, b=150, l=80, r=80),
+                    height=550,
+                    xaxis_tickangle=45,
+                    showlegend=False
+                )
+                return fig
+    return None
+
 def grafico_taxa_rejeicao_por_time(df_filtrado):
     """Gráfico da taxa de rejeição por time"""
     if 'Time' in df_filtrado.columns and 'Status' in df_filtrado.columns:
@@ -2180,7 +2355,7 @@ def grafico_taxa_rejeicao_por_time(df_filtrado):
                     color_continuous_scale=['#4ECDC4', '#45B7D1', '#6C5CE7'],
                     text='Taxa_Rejeicao'
                 )
-                fig.update_coloraxes(colorbar_title="Taxa de Rejeição (%)")
+                fig.update_coloraxes(showscale=False)
                 fig.update_layout(
                     margin=dict(t=50, b=120, l=120, r=80),
                     height=450
@@ -2306,20 +2481,22 @@ def grafico_comparativo_testadores(df_filtrado):
             ))
             
             fig.add_trace(go.Scatter(
-                name='Taxa de Detecção (%)',
+                name='Bugs Encontrados (%)',
                 x=testador_stats['Responsavel pelo teste'],
                 y=testador_stats['Taxa_Deteccao'],
                 yaxis='y2',
                 mode='lines+markers',
                 marker_color='orange',
-                line=dict(width=3)
+                line=dict(width=3),
+                text=[f"{val:.1f}%" for val in testador_stats['Taxa_Deteccao']],
+                textposition='top center'
             ))
             
             fig.update_layout(
                 title="👥 Comparativo de Performance entre Testadores",
                 xaxis_title="Testador",
                 yaxis=dict(title="Quantidade de Testes", side="left"),
-                yaxis2=dict(title="Taxa de Detecção (%)", side="right", overlaying="y"),
+                yaxis2=dict(title="Bugs Encontrados (%)", side="right", overlaying="y"),
                 legend=dict(x=0.01, y=0.99),
                 hovermode='x unified',
                 margin=dict(t=50, b=50, l=50, r=50),
@@ -2335,7 +2512,7 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
     st.markdown("#### 📈 **Resumo Executivo - Impacto do Time de Qualidade**")
     
     # Cálculos principais
-    total_planilha = len(df_original)
+    total_planilha = len(df_filtrado) + (len(df_sem_teste) if df_sem_teste is not None else 0)
     
     # Verificar se a coluna 'Responsavel pelo teste' existe
     if 'Responsavel pelo teste' in df_filtrado.columns:
@@ -2344,7 +2521,7 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
         # Se não existir, usar uma estimativa baseada em status diferentes de vazio
         total_testes_efetuados = len(df_filtrado[df_filtrado['Status'].notna()]) if 'Status' in df_filtrado.columns else len(df_filtrado)
     
-    total_sem_teste = len(df_sem_teste) if df_sem_teste is not None else len(df_original[df_original['Motivo'].str.upper().str.contains('SEM TESTE', na=False)]) if 'Motivo' in df_original.columns else 0
+    total_sem_teste = len(df_sem_teste) if df_sem_teste is not None else 0
     
     # Métricas de bugs
     df_rejeitadas = df_filtrado[df_filtrado['Status'] == 'REJEITADA'] if 'Status' in df_filtrado.columns else pd.DataFrame()
@@ -2406,7 +2583,7 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
         taxa_deteccao = (total_bugs_encontrados / total_testes_efetuados * 100) if total_testes_efetuados > 0 else 0
         rejeitadas = len(df_filtrado[df_filtrado['Status'] == 'REJEITADA']) if 'Status' in df_filtrado.columns else 0
         st.metric(
-            "🔍 Taxa de Detecção", 
+            "🔍 Bugs Encontrados (%)", 
             f"{taxa_deteccao:.1f}%",
             delta=f"🚨 {rejeitadas:,} testes c/ problemas | ✅ {total_testes_efetuados - rejeitadas:,} aprovados",
             help=f"Percentual de testes que identificaram problemas: {rejeitadas:,} de {total_testes_efetuados:,} testes. Taxa ideal: 15-25% (indica qualidade adequada do código)"
@@ -2554,8 +2731,8 @@ def main():
     st.sidebar.title("Navegação")
     modulo_selecionado = st.sidebar.radio(
         "Selecione o módulo:",
-        ["🔍 Qualidade (QA)", "🔧 Sustentação"],
-        help="Escolha entre o módulo de análise de QA ou o módulo de sustentação"
+        ["🔍 Relatórios", "🔧 Sustentação"],
+        help="Escolha entre o módulo de relatórios ou o módulo de sustentação"
     )
     
     if modulo_selecionado == "🔧 Sustentação":
@@ -2567,7 +2744,7 @@ def main():
     
     # Módulo de QA (código original)
     # Título principal
-    st.title("🔍 Dashboard de Métricas Q.A DelTech")
+    st.title("🔍 Dashboard de Métricas DelTech")
     
     # Subtítulo será atualizado após aplicar filtros
     placeholder_subtitulo = st.empty()
@@ -2680,7 +2857,7 @@ def main():
             st.markdown("#### 🎯 **Resumo Executivo - Principais Indicadores**")
             
             # Calcular métricas principais para o resumo
-            total_planilha = len(df)
+            total_planilha = len(df_com_teste) + len(df_sem_teste) if df_sem_teste is not None else len(df_com_teste)
             total_testes_efetuados = len(df_com_teste)
             cobertura_teste = (total_testes_efetuados / total_planilha * 100) if total_planilha > 0 else 0
             aprovadas = len(df_com_teste[df_com_teste['Status'] == 'APROVADA']) if 'Status' in df_com_teste.columns else 0
@@ -2781,7 +2958,7 @@ def main():
                 
                 with col_rec3:
                     # Análise de cobertura
-                    total_tasks = len(df) if not df.empty else 0
+                    total_tasks = len(df_com_teste) + len(df_sem_teste) if df_sem_teste is not None else len(df_com_teste)
                     cobertura = (total_testes / total_tasks * 100) if total_tasks > 0 else 0
                     
                     if cobertura >= 90:
@@ -3257,6 +3434,40 @@ def main():
                 if fig_status:
                     fig_status.update_layout(title_font_color='#FFFFFF')
                     st.plotly_chart(fig_status, use_container_width=True, key="status_distribuicao_sprint")
+            
+            st.markdown("---")
+            st.markdown("#### 👨‍💻 **Análise por Desenvolvedor**")
+            
+            col_dev1, col_dev2 = st.columns(2)
+            
+            with col_dev1:
+                fig_aprovadas_dev = grafico_ranking_aprovadas_por_dev(df_com_teste)
+                if fig_aprovadas_dev:
+                    fig_aprovadas_dev.update_layout(title_font_color='#FFFFFF')
+                    st.plotly_chart(fig_aprovadas_dev, use_container_width=True, key="ranking_aprovadas_por_dev")
+                else:
+                    st.info("📋 Dados insuficientes para ranking de tarefas aprovadas")
+            
+            with col_dev2:
+                fig_rejeitadas_dev = grafico_rejeicoes_por_dev(df_com_teste)
+                if fig_rejeitadas_dev:
+                    fig_rejeitadas_dev.update_layout(title_font_color='#FFFFFF')
+                    st.plotly_chart(fig_rejeitadas_dev, use_container_width=True, key="rejeicoes_por_dev_sprint")
+                else:
+                    st.info("📋 Dados insuficientes para análise de rejeições por desenvolvedor")
+            
+            col_dev3, col_dev4 = st.columns(2)
+            
+            with col_dev3:
+                fig_retestadas_dev = grafico_tarefas_retestadas_por_dev(df_com_teste)
+                if fig_retestadas_dev:
+                    fig_retestadas_dev.update_layout(title_font_color='#FFFFFF')
+                    st.plotly_chart(fig_retestadas_dev, use_container_width=True, key="tarefas_retestadas_por_dev")
+                else:
+                    st.info("📋 Dados insuficientes para análise de tarefas retestadas")
+            
+            with col_dev4:
+                st.empty()
         
         with tab4:
             st.markdown("### 🧑‍🤝‍🧑 **Visão por Testador**")
@@ -3317,7 +3528,7 @@ def main():
                         text='Total_Testes'
                     )
                     fig_prod.update_traces(textposition='outside')
-                    fig_prod.update_coloraxes(colorbar_title="Total de Testes")
+                    fig_prod.update_coloraxes(showscale=False)
                     fig_prod.update_layout(
                         title_font_color='#FFFFFF',
                         xaxis_title='Testador',
@@ -3337,8 +3548,14 @@ def main():
                         y=['Taxa_Aprovacao', 'Taxa_Deteccao'],
                         title='📊 Comparativo de Taxas (%)',
                         color_discrete_sequence=['#28a745', '#ffc107'],
-                        barmode='group'
+                        barmode='group',
+                        text_auto=True
                     )
+                    
+                    # Renomear legendas para serem mais claras
+                    newnames = {'Taxa_Aprovacao': 'Taxa de Aprovação (%)', 'Taxa_Deteccao': 'Bugs Encontrados (%)'}
+                    fig_taxas.for_each_trace(lambda t: t.update(name = newnames[t.name]))
+                    
                     fig_taxas.update_layout(
                         title_font_color='#FFFFFF',
                         xaxis_title='Testador',
@@ -3347,6 +3564,7 @@ def main():
                         margin=dict(t=50, b=120, l=80, r=80),
                         height=450
                     )
+                    fig_taxas.update_traces(texttemplate='%{y:.1f}%', textposition='outside')
                     fig_taxas.update_xaxes(tickangle=45)
                     st.plotly_chart(fig_taxas, use_container_width=True, key="comparativo_taxas")
                 
@@ -3369,7 +3587,7 @@ def main():
                             
                             col_d, col_e = st.columns(2)
                             with col_d:
-                                st.metric("Taxa de Detecção", f"{row['Taxa_Deteccao']:.1f}%")
+                                st.metric("Bugs Encontrados (%)", f"{row['Taxa_Deteccao']:.1f}%")
                             with col_e:
                                 st.metric("Taxa de Aprovação", f"{row['Taxa_Aprovacao']:.1f}%")
                 
@@ -3384,7 +3602,7 @@ def main():
                     
                     st.markdown("")
                     ranking_deteccao = testador_stats.sort_values('Taxa_Deteccao', ascending=False)
-                    st.markdown("🔍 **Taxa de Detecção de Bugs**")
+                    st.markdown("🔍 **Bugs Encontrados (%)**")
                     for i, (_, row) in enumerate(ranking_deteccao.iterrows(), 1):
                         emoji = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "📍"
                         st.write(f"{emoji} {i}º - {row['Responsavel pelo teste']}: {row['Taxa_Deteccao']:.1f}%")
@@ -3423,7 +3641,7 @@ def main():
                 fig_taxa = go.Figure()
                 
                 fig_taxa.add_trace(go.Scatter(
-                    name='Taxa de Detecção',
+                    name='Bugs Encontrados (%)',
                     x=testador_stats['Responsavel pelo teste'],
                     y=testador_stats['Taxa_Deteccao'],
                     mode='lines+markers',
@@ -3782,73 +4000,8 @@ def main():
             df_bugs = carregar_dados_bugs()
             
             if df_bugs is not None and not df_bugs.empty:
-                # Filtros para análise de bugs
-                st.markdown("#### 🔍 **Filtros de Bugs**")
-                
-                col_bug_f1, col_bug_f2, col_bug_f3, col_bug_f4, col_bug_f5 = st.columns(5)
-                
-                with col_bug_f1:
-                    times_bugs_disponiveis = ['Todos'] + sorted(df_bugs['Time'].dropna().unique().tolist()) if 'Time' in df_bugs.columns else ['Todos']
-                    time_bug_selecionado = st.selectbox("Filtrar por Time:", times_bugs_disponiveis, key="filter_time_bugs")
-                
-                with col_bug_f2:
-                    status_bugs_disponiveis = ['Todos'] + sorted(df_bugs['Status'].dropna().unique().tolist()) if 'Status' in df_bugs.columns else ['Todos']
-                    status_bug_selecionado = st.selectbox("Filtrar por Status:", status_bugs_disponiveis, key="filter_status_bugs")
-                
-                with col_bug_f3:
-                    prioridade_bugs_disponiveis = ['Todos'] + sorted(df_bugs['Prioridade'].dropna().unique().tolist()) if 'Prioridade' in df_bugs.columns else ['Todos']
-                    prioridade_bug_selecionada = st.selectbox("Filtrar por Prioridade:", prioridade_bugs_disponiveis, key="filter_prioridade_bugs")
-                
-                with col_bug_f4:
-                    fonte_bugs_disponiveis = ['Todos'] + sorted(df_bugs['Encontrado por:'].dropna().unique().tolist()) if 'Encontrado por:' in df_bugs.columns else ['Todos']
-                    fonte_bug_selecionada = st.selectbox("Filtrar por Fonte:", fonte_bugs_disponiveis, key="filter_fonte_bugs")
-                
-                with col_bug_f5:
-                    if 'Data' in df_bugs.columns and not df_bugs['Data'].dropna().empty:
-                        data_bug_min = df_bugs['Data'].min().date()
-                        data_bug_max = df_bugs['Data'].max().date()
-                        data_bug_range = st.date_input(
-                            "Período:",
-                            value=(data_bug_min, data_bug_max),
-                            min_value=data_bug_min,
-                            max_value=data_bug_max,
-                            key="filter_data_bugs"
-                        )
-                    else:
-                        data_bug_range = None
-                
-                # Aplicar filtros aos dados de bugs
+                # Usar os dados de bugs sem filtros adicionais
                 df_bugs_filtrado = df_bugs.copy()
-                
-                if time_bug_selecionado != 'Todos':
-                    df_bugs_filtrado = df_bugs_filtrado[df_bugs_filtrado['Time'] == time_bug_selecionado]
-                
-                if status_bug_selecionado != 'Todos':
-                    df_bugs_filtrado = df_bugs_filtrado[df_bugs_filtrado['Status'] == status_bug_selecionado]
-                
-                if prioridade_bug_selecionada != 'Todos':
-                    df_bugs_filtrado = df_bugs_filtrado[df_bugs_filtrado['Prioridade'] == prioridade_bug_selecionada]
-                
-                if fonte_bug_selecionada != 'Todos':
-                    df_bugs_filtrado = df_bugs_filtrado[df_bugs_filtrado['Encontrado por:'] == fonte_bug_selecionada]
-                
-                if data_bug_range and len(data_bug_range) == 2 and 'Data' in df_bugs.columns:
-                    df_bugs_filtrado = df_bugs_filtrado[
-                        (df_bugs_filtrado['Data'].dt.date >= data_bug_range[0]) & 
-                        (df_bugs_filtrado['Data'].dt.date <= data_bug_range[1])
-                    ]
-                
-                # Verificar se há filtros ativos para bugs
-                filtros_bugs_ativos = (
-                    time_bug_selecionado != 'Todos' or 
-                    status_bug_selecionado != 'Todos' or 
-                    prioridade_bug_selecionada != 'Todos' or 
-                    fonte_bug_selecionada != 'Todos' or 
-                    (data_bug_range and len(data_bug_range) == 2)
-                )
-                
-                if filtros_bugs_ativos:
-                    st.info(f"Mostrando {len(df_bugs_filtrado)} bugs de {len(df_bugs)} registros totais.")
                 
                 st.markdown("---")
                 # Processar métricas de bugs (usando dados filtrados)
@@ -4021,48 +4174,46 @@ def main():
                 """)
         
         with tab8:
-            st.header("📊 Relatório Detalhado para P.M.")
+            st.header("📊 Relatório Detalhado.")
             st.markdown("### Análise Detalhada de Bugs e Falhas por Tarefa")
             
             # Botão de exportação PDF
             col_export, col_space = st.columns([1, 3])
             with col_export:
-                botao_exportar_pdf("Relatorio_PM", criar_pdf_relatorio_pm, df_com_teste, df, df_sem_teste)
+                botao_exportar_pdf("Relatorio_Detalhado", criar_pdf_relatorio_detalhado, df_com_teste, df, df_sem_teste)
             
             st.markdown("---")
             
-            # Filtros específicos para o relatório
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                times_disponiveis = ['Todos'] + sorted(df_com_teste['Time'].dropna().unique().tolist())
-                time_selecionado = st.selectbox("Filtrar por Time:", times_disponiveis, key="pm_time")
-            
-            with col2:
-                status_disponiveis = ['Todos'] + sorted(df_com_teste['Status'].dropna().unique().tolist())
-                status_selecionado = st.selectbox("Filtrar por Status:", status_disponiveis, key="pm_status")
-            
-            with col3:
-                periodo_dias = st.selectbox("Período:", [7, 15, 30, 60, 90, 'Todos'], index=2, key="pm_periodo")
-            
-            # Aplicar filtros
+            # Usar os dados já filtrados pelos filtros principais
             df_pm = df_com_teste.copy()
-            
-            if time_selecionado != 'Todos':
-                df_pm = df_pm[df_pm['Time'] == time_selecionado]
-            
-            if status_selecionado != 'Todos':
-                df_pm = df_pm[df_pm['Status'] == status_selecionado]
-            
-            if periodo_dias != 'Todos':
-                data_limite = datetime.now() - pd.Timedelta(days=periodo_dias)
-                df_pm = df_pm[df_pm['Data'] >= data_limite]
             
             # Separar dados por tipo de problema
             df_rejeitadas = df_pm[df_pm['Status'] == 'REJEITADA'].copy()
             df_temp = df_pm.copy()
             df_temp['Erros'] = pd.to_numeric(df_temp['Erros'], errors='coerce').fillna(0)
-            df_com_erros = df_temp[df_temp['Erros'].notna() & (df_temp['Erros'] > 0)].copy()
+            
+            # Contar tarefas com defeitos (unificando coluna Erros e motivos de rejeição)
+            tarefas_com_defeitos = set()
+            
+            # 1. Tarefas com erros na coluna numérica
+            df_com_erros_numericos = df_temp[df_temp['Erros'] > 0]
+            for idx in df_com_erros_numericos.index:
+                tarefas_com_defeitos.add(idx)
+            
+            # 2. Tarefas rejeitadas com motivos válidos
+            motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
+            for idx, row in df_rejeitadas.iterrows():
+                tem_motivo_valido = False
+                for col in motivos_cols:
+                    if col in row and pd.notna(row[col]) and str(row[col]).strip() != '':
+                        motivo = str(row[col]).strip().lower()
+                        if motivo not in ['aprovada', 'sem recusa']:
+                            tem_motivo_valido = True
+                            break
+                if tem_motivo_valido:
+                    tarefas_com_defeitos.add(idx)
+            
+            total_com_defeitos = len(tarefas_com_defeitos)
             
             # Seção 1: Resumo Executivo
             st.markdown("#### 📈 Resumo Executivo")
@@ -4097,12 +4248,16 @@ def main():
             col5, col6, col7, col8 = st.columns(4)
             
             with col5:
-                total_com_erros = len(df_com_erros)
-                st.metric("⚠️ Tarefas com Erros", total_com_erros)
+                st.metric("⚠️ Tarefas com Defeitos", total_com_defeitos, 
+                         help="Tarefas com erros numéricos ou motivos de rejeição válidos")
             
             with col6:
-                total_problemas = total_rejeitadas + total_com_erros
-                st.metric("🔴 Total de Problemas", total_problemas)
+                # Contar total de problemas encontrados (soma de todos os motivos + erros numéricos)
+                total_problemas_encontrados = contar_total_bugs(df_rejeitadas)
+                if 'Erros' in df_temp.columns:
+                    total_problemas_encontrados += int(df_temp['Erros'].sum())
+                st.metric("🔴 Total de Problemas Encontrados", total_problemas_encontrados,
+                         help="Soma de todos os motivos de rejeição + erros numéricos da coluna Erros")
             
             with col7:
                 total_concluidas = total_aprovadas + total_prontas
@@ -4111,6 +4266,130 @@ def main():
             with col8:
                 taxa_sucesso = (total_concluidas / total_tasks * 100) if total_tasks > 0 else 0
                 st.metric("📊 Taxa de Sucesso", f"{taxa_sucesso:.1f}%")
+            
+            st.divider()
+            
+            # Seção 2: Análise de Retestes e Ciclo de Vida das Tarefas
+            st.markdown("#### 🔄 Histórico de Retestes e Taxa de Aprovação")
+            
+            # Analisar histórico de retestes
+            historico_retestes = analisar_historico_retestes(df_pm)
+            
+            # Métricas de reteste
+            col_ret1, col_ret2, col_ret3, col_ret4 = st.columns(4)
+            
+            with col_ret1:
+                st.metric(
+                    "🔄 Tarefas Retestadas", 
+                    historico_retestes['total_tarefas_retestadas'],
+                    help="Tarefas que foram rejeitadas e posteriormente retestadas"
+                )
+            
+            with col_ret2:
+                st.metric(
+                    "✅ Aprovadas Após Reteste", 
+                    historico_retestes['tarefas_aprovadas_apos_reteste'],
+                    help="Tarefas que foram aprovadas após correções e reteste"
+                )
+            
+            with col_ret3:
+                taxa_aprovacao_reteste = historico_retestes['taxa_aprovacao_apos_reteste']
+                st.metric(
+                    "📈 Taxa de Aprovação Pós-Reteste", 
+                    f"{taxa_aprovacao_reteste:.1f}%",
+                    help="Percentual de tarefas aprovadas após correções"
+                )
+            
+            with col_ret4:
+                if historico_retestes['total_tarefas_retestadas'] > 0:
+                    eficiencia_correcao = (historico_retestes['tarefas_aprovadas_apos_reteste'] / historico_retestes['total_tarefas_retestadas']) * 100
+                    delta_eficiencia = "🟢 Excelente" if eficiencia_correcao >= 80 else "🟡 Bom" if eficiencia_correcao >= 60 else "🔴 Atenção"
+                else:
+                    eficiencia_correcao = 0
+                    delta_eficiencia = "📊 Sem dados"
+                
+                st.metric(
+                    "🎯 Eficiência de Correção", 
+                    f"{eficiencia_correcao:.1f}%",
+                    delta=delta_eficiencia,
+                    help="Capacidade da equipe de corrigir problemas identificados"
+                )
+            
+            # Detalhamento do histórico de retestes
+            if not historico_retestes['detalhes_retestes'].empty:
+                st.markdown("##### 📋 Detalhamento das Tarefas Retestadas")
+                
+                df_retestes = historico_retestes['detalhes_retestes'].copy()
+                
+                # Formatar datas
+                if 'Primeira_Data' in df_retestes.columns:
+                    df_retestes['Primeira_Data'] = pd.to_datetime(df_retestes['Primeira_Data']).dt.strftime('%d/%m/%Y')
+                if 'Ultima_Data' in df_retestes.columns:
+                    df_retestes['Ultima_Data'] = pd.to_datetime(df_retestes['Ultima_Data']).dt.strftime('%d/%m/%Y')
+                
+                # Renomear colunas para exibição
+                df_retestes_exibir = df_retestes.rename(columns={
+                    'Identificador': 'ID/Identificador',
+                    'Nome_Tarefa': 'Nome da Tarefa',
+                    'Total_Testes': 'Qtd Testes',
+                    'Sequencia_Status': 'Sequência de Status',
+                    'Aprovada_Apos_Reteste': 'Aprovada Após Reteste',
+                    'Primeira_Data': 'Primeira Data',
+                    'Ultima_Data': 'Última Data',
+                    'Responsavel': 'Responsável'
+                })
+                
+                st.dataframe(
+                    df_retestes_exibir,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Aprovada Após Reteste": st.column_config.CheckboxColumn(
+                            "Aprovada Após Reteste",
+                            help="Indica se a tarefa foi aprovada após correções"
+                        ),
+                        "Sequência de Status": st.column_config.TextColumn(
+                            "Sequência de Status",
+                            help="Histórico completo dos status da tarefa",
+                            width="large"
+                        )
+                    }
+                )
+                
+                # Botão para exportar dados de retestes
+                csv_retestes = df_retestes_exibir.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    label="📥 Exportar Histórico de Retestes (CSV)",
+                    data=csv_retestes,
+                    file_name=f"historico_retestes_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv"
+                )
+                
+                # Insights sobre retestes
+                st.markdown("##### 💡 Insights sobre Retestes")
+                
+                if taxa_aprovacao_reteste >= 80:
+                    st.success(f"🎯 **Excelente capacidade de correção**: {taxa_aprovacao_reteste:.1f}% das tarefas retestadas foram aprovadas após correções.")
+                elif taxa_aprovacao_reteste >= 60:
+                    st.info(f"📊 **Boa capacidade de correção**: {taxa_aprovacao_reteste:.1f}% das tarefas retestadas foram aprovadas. Há espaço para melhorias.")
+                else:
+                    st.warning(f"⚠️ **Atenção necessária**: Apenas {taxa_aprovacao_reteste:.1f}% das tarefas retestadas foram aprovadas. Revisar processo de correções.")
+                
+                # Análise por time se houver dados suficientes
+                if len(df_retestes) > 0 and 'Time' in df_retestes.columns:
+                    times_reteste = df_retestes.groupby('Time').agg({
+                        'Aprovada_Apos_Reteste': ['count', 'sum']
+                    }).round(1)
+                    
+                    if len(times_reteste) > 1:
+                        st.markdown("**📊 Performance por Time:**")
+                        for time in times_reteste.index:
+                            total_time = times_reteste.loc[time, ('Aprovada_Apos_Reteste', 'count')]
+                            aprovadas_time = times_reteste.loc[time, ('Aprovada_Apos_Reteste', 'sum')]
+                            taxa_time = (aprovadas_time / total_time * 100) if total_time > 0 else 0
+                            st.write(f"• **{time}**: {aprovadas_time}/{total_time} aprovadas ({taxa_time:.1f}%)")
+            else:
+                st.info("📊 Nenhuma tarefa retestada encontrada no período selecionado.")
             
             st.divider()
             
@@ -4284,29 +4563,48 @@ def main():
             
             st.divider()
             
-            # Seção 4: Detalhamento de Tarefas com Erros
-            if len(df_com_erros) > 0:
-                st.markdown("#### ⚠️ Detalhamento de Tarefas com Erros")
+            # Seção 4: Detalhamento de Tarefas com Defeitos
+            if total_com_defeitos > 0:
+                st.markdown("#### ⚠️ Detalhamento de Tarefas com Defeitos")
                 
-                df_erros_detalhada = df_com_erros[['Data', 'Sprint', 'Time', 'Nome da Task', 'Link da Task', 
-                                                 'Responsável', 'Erros', 'Status', 'Responsavel pelo teste']].copy()
+                # Criar DataFrame com todas as tarefas que têm defeitos
+                df_com_defeitos = df_pm.loc[list(tarefas_com_defeitos)].copy()
+                df_erros_detalhada = df_com_defeitos[['Data', 'Sprint', 'Time', 'Nome da Task', 'Link da Task', 
+                                                     'Responsável', 'Erros', 'Status', 'Responsavel pelo teste']].copy()
                 
-                # Criar descrição para erros
-                def criar_descricao_erro(row):
-                    num_erros = int(row['Erros']) if pd.notna(row['Erros']) else 0
+                # Criar descrição para defeitos
+                def criar_descricao_defeito(row):
+                    try:
+                        num_erros = int(float(str(row['Erros']))) if pd.notna(row['Erros']) and str(row['Erros']).strip() != '' else 0
+                        num_erros = num_erros if num_erros > 0 else 0
+                    except (ValueError, TypeError):
+                        num_erros = 0
                     status = row['Status'] if pd.notna(row['Status']) else 'N/A'
                     
-                    if num_erros == 1:
-                        return f"1 erro encontrado (Status: {status})"
-                    elif num_erros > 1:
-                        return f"{num_erros} erros encontrados (Status: {status})"
+                    # Contar motivos de rejeição válidos
+                    motivos_cols = ['Motivo', 'Motivo2', 'Motivo3', 'Motivo4', 'Motivo5', 'Motivo6', 'Motivo7']
+                    motivos_validos = 0
+                    for col in motivos_cols:
+                        if col in row and pd.notna(row[col]) and str(row[col]).strip() != '':
+                            motivo = str(row[col]).strip().lower()
+                            if motivo not in ['aprovada', 'sem recusa']:
+                                motivos_validos += 1
+                    
+                    descricao_partes = []
+                    if num_erros > 0:
+                        descricao_partes.append(f"{num_erros} erro{'s' if num_erros > 1 else ''} numérico{'s' if num_erros > 1 else ''}")
+                    if motivos_validos > 0:
+                        descricao_partes.append(f"{motivos_validos} motivo{'s' if motivos_validos > 1 else ''} de rejeição")
+                    
+                    if descricao_partes:
+                        return f"{' + '.join(descricao_partes)} (Status: {status})"
                     else:
-                        return "Erro não quantificado"
+                        return f"Defeito identificado (Status: {status})"
                 
-                df_erros_detalhada['Descrição do Erro'] = df_erros_detalhada.apply(criar_descricao_erro, axis=1)
+                df_erros_detalhada['Descrição do Defeito'] = df_erros_detalhada.apply(criar_descricao_defeito, axis=1)
                 
                 colunas_erros = ['Data', 'Sprint', 'Time', 'Nome da Task', 'Responsável', 
-                               'Descrição do Erro', 'Responsavel pelo teste', 'Link da Task']
+                               'Descrição do Defeito', 'Responsavel pelo teste', 'Link da Task']
                 
                 df_erros_exibir = df_erros_detalhada[colunas_erros].copy()
                 df_erros_exibir['Data'] = df_erros_exibir['Data'].dt.strftime('%d/%m/%Y')
@@ -4321,9 +4619,9 @@ def main():
                             help="Clique para abrir a task",
                             display_text="🔗 Abrir Task"
                         ),
-                        "Descrição do Erro": st.column_config.TextColumn(
-                            "Descrição do Erro",
-                            help="Detalhes dos erros encontrados"
+                        "Descrição do Defeito": st.column_config.TextColumn(
+                            "Descrição do Defeito",
+                            help="Detalhes dos defeitos encontrados (erros numéricos + motivos de rejeição)"
                         )
                     }
                 )
@@ -4406,7 +4704,7 @@ def main():
                             st.info("Dados insuficientes para análise temporal.")
             
             # Seção 6: Recomendações
-            st.markdown("#### 💡 Recomendações para P.M.")
+            st.markdown("#### 💡 Recomendações")
             
             if len(df_pm) > 0:
                 recomendacoes = []

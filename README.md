@@ -1,7 +1,29 @@
 
-# Dashboard de Métricas DelTech - QA & Sustentação
+# 📊 Dashboard de Métricas DelTech - QA & Sustentação
 
-Dashboard interativo para análise de métricas de qualidade e performance da equipe de Q.A e sustentação.
+Dashboard interativo desenvolvido em Streamlit para análise de métricas de qualidade e performance das equipes de Q.A e Sustentação da DelTech.
+
+## 🚀 Início Rápido
+
+1. **Clone o repositório**
+2. **Instale as dependências**: `pip install -r requirements.txt`
+3. **Execute o dashboard**: `streamlit run dashboard.py`
+4. **Acesse**: http://localhost:8501
+
+## 📁 Estrutura do Projeto
+
+```
+📁 metricas-python/
+├── 📄 dashboard.py              # 🎯 Dashboard principal
+├── 📄 analisar_bugs.py          # 🐛 Análise de bugs
+├── 📄 analisar_planilhas.py     # 📊 Processamento de planilhas
+├── 📄 sustentacao.py            # 🔧 Métricas de sustentação
+├── 📄 ler_bugs.py               # 📖 Leitura de dados de bugs
+├── 📄 google_sheets_integration.py # 🔗 Integração Google Sheets
+├── 📄 requirements.txt          # 📦 Dependências
+├── 📄 secrets_example.toml      # 🔐 Exemplo de configuração
+└── 📄 README.md                 # 📖 Documentação
+```
 
 ## Funcionalidades
 
@@ -66,73 +88,95 @@ Dashboard interativo para análise de métricas de qualidade e performance da eq
 - **Plotly** - Biblioteca para gráficos interativos
 - **OpenPyXL** - Leitura de arquivos Excel
 - **NumPy** - Computação numérica
+- **Google Sheets API** - Integração com planilhas online
 
-## 🚀 Deploy no Streamlit Cloud (Recomendado)
+## 🔗 Configuração Google Sheets
 
-### Pré-requisitos:
-1. Conta no [GitHub](https://github.com)
-2. Conta no [Streamlit Cloud](https://share.streamlit.io)
+### 1. Criar Service Account
 
-### Passos para Deploy:
+1. Acesse [Google Cloud Console](https://console.cloud.google.com/)
+2. Crie um projeto ou selecione um existente
+3. Ative a **Google Sheets API**
+4. Crie uma **Service Account** em "APIs & Services" > "Credentials"
+5. Baixe o arquivo JSON das credenciais
 
-1. **Faça fork ou clone este repositório**
-2. **Acesse [share.streamlit.io](https://share.streamlit.io)**
-3. **Conecte sua conta GitHub**
-4. **Clique em "New app"**
-5. **Selecione:**
-   - Repository: `seu-usuario/dashboard-qa-deltech`
+### 2. Configurar Secrets
+
+1. Copie `secrets_example.toml` para `.streamlit/secrets.toml`
+2. Preencha com suas credenciais reais:
+
+```toml
+[google_sheets]
+spreadsheet_url = "URL_DA_SUA_PLANILHA"
+worksheet_name = "NOME_DA_ABA"
+project_id = "seu-projeto-id"
+private_key_id = "sua-private-key-id"
+private_key = "-----BEGIN PRIVATE KEY-----\nSUA_CHAVE\n-----END PRIVATE KEY-----\n"
+client_email = "service-account@projeto.iam.gserviceaccount.com"
+client_id = "seu-client-id"
+client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/..."
+```
+
+### 3. Compartilhar Planilha
+
+1. Abra sua planilha no Google Sheets
+2. Clique em "Compartilhar"
+3. Adicione o email da Service Account
+4. Dê permissão de "Visualizador"
+
+⚠️ **Importante**: Nunca commite o arquivo `.streamlit/secrets.toml` no repositório!
+
+## 🚀 Deploy no Streamlit Cloud
+
+1. **Fork** este repositório no GitHub
+2. **Acesse** [share.streamlit.io](https://share.streamlit.io)
+3. **Conecte** sua conta GitHub
+4. **Crie novo app** selecionando:
+   - Repository: `seu-usuario/metricas-python`
    - Branch: `main`
    - Main file path: `dashboard.py`
-6. **Clique em "Deploy!"**
+5. **Configure secrets** nas configurações do app
+6. **Deploy!** 🎉
 
-✅ **Pronto!** Seu dashboard estará online em poucos minutos.
+## 💻 Instalação Local
 
-## 💻 Execução Local
-
-### Instalação:
 ```bash
 # Clone o repositório
-git clone https://github.com/seu-usuario/dashboard-qa-deltech.git
-cd dashboard-qa-deltech
+git clone https://github.com/seu-usuario/metricas-python.git
+cd metricas-python
 
 # Instale as dependências
 pip install -r requirements.txt
-```
 
-### Executar:
-```bash
+# Execute o dashboard
 streamlit run dashboard.py
 ```
 
-O dashboard estará disponível em: `http://localhost:8501`
+**Acesse**: http://localhost:8501
 
 ## 📋 Como Usar
 
 1. **Acesse o dashboard** (online ou local)
-2. **Faça upload** da sua planilha Excel usando o botão "Escolha o arquivo Excel"
-3. **Explore as métricas** na parte superior da página
-4. **Use os filtros** na barra lateral para análises específicas
-5. **Visualize os gráficos** interativos para insights detalhados
+2. **Conecte ao Google Sheets** ou **faça upload** de arquivo Excel
+3. **Explore as métricas** na parte superior
+4. **Use os filtros** na barra lateral
+5. **Visualize os gráficos** interativos
 
+### 📊 Dados Suportados
 
+O dashboard processa planilhas com as seguintes colunas:
 
-## Exemplo de Uso
-
-Se você tem uma planilha `dados.xlsx` com as colunas:
-```
-Data       | Nome    | Valor
-15/01/2025 | Item A  | 100
-30/01/2025 | Item B  | 200
-```
-
-Após executar o script, será criado `dados_com_sprint.xlsx`:
-```
-Data       | Nome    | Valor | Sprint
-15/01/2025 | Item A  | 100   | Sprint 1
-30/01/2025 | Item B  | 200   | Sprint 2
-```
-
-**Nota**: O cálculo considera apenas dias úteis (segunda a sexta-feira). Datas que caem em finais de semana não pertencem a nenhuma sprint.
+| Coluna | Descrição | Obrigatória |
+|--------|-----------|-------------|
+| **Data** | Data da task | ✅ |
+| **Sprint** | Sprint da task | ✅ |
+| **Time** | Time responsável | ✅ |
+| **Nome da Task** | Descrição da task | ✅ |
+| **Status** | APROVADA/REJEITADA/PRONTO PARA PUBLICAÇÃO | ✅ |
+| **Responsavel pelo teste** | Testador (Eduardo/Wilson) | ✅ |
+| **Motivo** | Motivo da rejeição | ⚠️ |
+| **Link da task** | URL da task | ⚠️ |
+| **ID** | Identificador único | ⚠️ |
 
 ## 📊 Métricas Disponíveis
 
@@ -157,115 +201,37 @@ Data       | Nome    | Valor | Sprint
 - **👤 Responsável pelo Teste**: Filtrar por testador (Eduardo/Wilson)
 - **📊 Status**: Filtrar por status das tasks (Aprovada/Rejeitada)
 
-## 📁 Estrutura do Projeto
+## 🎯 Filtros Disponíveis
 
-```
-📁 dashboard-qa-deltech/
-├── 📄 dashboard.py           # 🎯 Aplicação principal do dashboard
-├── 📄 requirements.txt       # 📦 Dependências Python
-├── 📄 README.md             # 📖 Documentação do projeto
-└── 📄 .gitignore            # 🚫 Arquivos ignorados pelo Git
-```
-
-## Estrutura de Dados
-
-O dashboard espera um arquivo Excel com as seguintes colunas:
-
-- **Data**: Data da task
-- **Sprint**: Número do sprint
-- **Time**: Nome do time responsável
-- **Nome da Task**: Título da task
-- **Link da task**: URL da task
-- **Status**: APROVADA, REJEITADA ou PRONTO PARA PUBLICAÇÃO
-- **Responsável**: Desenvolvedor responsável
-- **Motivo**: Primeiro motivo (se rejeitada)
-- **Motivo2**: Segundo motivo (se rejeitada)
-- **Motivo3**: Terceiro motivo (se rejeitada)
-- **Motivo4**: Quarto motivo (se rejeitada)
-- **Motivo5**: Quinto motivo (se rejeitada)
-- **Motivo6**: Sexto motivo (se rejeitada)
-- **Motivo7**: Sétimo motivo (se rejeitada)
-- **Responsavel pelo teste**: Testador responsável
-- **ID**: Identificador único da task
-
-## 📋 Formato da Planilha
-
-Sua planilha Excel deve conter as seguintes colunas:
-
-| Coluna | Descrição | Obrigatória |
-|--------|-----------|-------------|
-| **Data** | Data da task | ✅ |
-| **Sprint** | Sprint da task | ✅ |
-| **Time** | Time responsável | ✅ |
-| **Nome da Task** | Descrição da task | ✅ |
-| **Status** | Status atual (APROVADA/REJEITADA) | ✅ |
-| **Responsavel pelo teste** | Quem testou (Eduardo/Wilson) | ✅ |
-| **Motivo** | Motivo da rejeição | ⚠️ |
-| **Link da task** | URL da task | ⚠️ |
-| **ID** | Identificador único | ⚠️ |
-
-## 🤝 Contribuição
-
-Contribuições são bem-vindas! Para contribuir:
-
-1. **Fork** este repositório
-2. **Crie** uma branch para sua feature (`git checkout -b feature/nova-feature`)
-3. **Commit** suas mudanças (`git commit -m 'Adiciona nova feature'`)
-4. **Push** para a branch (`git push origin feature/nova-feature`)
-5. **Abra** um Pull Request
-
-## 📞 Suporte
-
-Para dúvidas ou problemas:
-- 🐛 Abra uma [issue no GitHub](https://github.com/seu-usuario/dashboard-qa-deltech/issues)
-- 📧 Entre em contato com a equipe DelTech
+- **📅 Período**: Filtrar por intervalo de datas
+- **🏃 Sprint**: Selecionar sprints específicas
+- **👤 Responsável pelo Teste**: Filtrar por testador
+- **📊 Status**: Filtrar por status das tasks
+- **🏢 Time**: Filtrar por time responsável
 
 ## 🔧 Troubleshooting
 
-### ❌ Problemas Comuns:
-
-**Erro "streamlit não encontrado":**
-```bash
-pip install streamlit
-# ou
-python -m pip install streamlit
-```
-
-**Erro ao ler Excel:**
-```bash
-pip install openpyxl
-```
+### Problemas Comuns:
 
 **Erro de dependências:**
 ```bash
 pip install -r requirements.txt --upgrade
 ```
 
-**Dashboard não abre localmente:**
+**Dashboard não abre:**
 - Verifique se a porta 8501 está livre
-- Tente acessar manualmente: `http://localhost:8501`
-- Use `python -m streamlit run dashboard.py` no Windows
+- Use: `python -m streamlit run dashboard.py`
 
-**Problemas com upload de arquivo:**
-- Verifique se o arquivo Excel não está aberto em outro programa
-- Certifique-se de que o arquivo contém as colunas obrigatórias
-- Tamanho máximo recomendado: 200MB
+**Problemas com Google Sheets:**
+- Verifique se a Service Account tem acesso à planilha
+- Confirme se as credenciais estão corretas no `secrets.toml`
 
-## 📈 Roadmap
+## 📞 Suporte
 
-- [ ] 🔄 Atualização automática de dados
-- [ ] 📊 Novos tipos de gráficos
-- [ ] 🎨 Temas personalizáveis
-- [ ] 📱 App mobile nativo
-- [ ] 🔗 Integração com APIs
-- [ ] 📧 Relatórios por email
-
-## 📄 Licença
-
-Este projeto é de uso interno da DelTech para análise de dados de Q.A.
+Para dúvidas ou problemas, entre em contato com a equipe DelTech.
 
 ---
 
 **🚀 Desenvolvido com ❤️ para otimizar a análise de dados de Q.A da DelTech**
 
-*Última atualização: Janeiro 2025*
+*Última atualização: Agosto 2025*
