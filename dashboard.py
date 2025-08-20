@@ -666,8 +666,11 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
     
     # Informações do rodapé simplificado
     from datetime import datetime
+    import pytz
+    brasilia_tz = pytz.timezone('America/Sao_Paulo')
+    now_brasilia = datetime.now(brasilia_tz)
     footer_data = [
-        ['Data de Geração:', datetime.now().strftime('%d/%m/%Y às %H:%M')],
+        ['Data de Geração:', now_brasilia.strftime('%d/%m/%Y às %H:%M')],
         ['Confidencialidade:', 'Documento Interno - Uso Restrito']
     ]
     
@@ -864,7 +867,7 @@ def carregar_dados():
         with st.spinner("🔄 Carregando dados do Google Sheets..."):
             df = load_google_sheets_data_automatically()
             if df is not None:
-                st.success(f"✅ Dados carregados automaticamente! {len(df)} registros encontrados.")
+                st.success(f"✅Planilha importada com sucesso! {len(df)} registros encontrados.")
                 return df
             else:
                 st.warning("⚠️ Não foi possível carregar os dados do Google Sheets. Verifique as credenciais.")
