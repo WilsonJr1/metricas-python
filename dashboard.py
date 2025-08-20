@@ -2761,19 +2761,19 @@ def main():
         col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
-            sprints_disponiveis = ['Todos'] + sorted(df['Sprint'].dropna().unique().tolist()) if 'Sprint' in df.columns else ['Todos']
+            sprints_disponiveis = ['Todos'] + sorted([str(x) for x in df['Sprint'].dropna().unique().tolist()]) if 'Sprint' in df.columns else ['Todos']
             sprint_selecionado = st.selectbox("Filtrar por Sprint:", sprints_disponiveis)
         
         with col2:
-            status_disponiveis = ['Todos'] + sorted(df['Status'].dropna().unique().tolist()) if 'Status' in df.columns else ['Todos']
+            status_disponiveis = ['Todos'] + sorted([str(x) for x in df['Status'].dropna().unique().tolist()]) if 'Status' in df.columns else ['Todos']
             status_selecionado = st.selectbox("Filtrar por Status:", status_disponiveis)
         
         with col3:
-            times_disponiveis = ['Todos'] + sorted(df['Time'].dropna().unique().tolist()) if 'Time' in df.columns else ['Todos']
+            times_disponiveis = ['Todos'] + sorted([str(x) for x in df['Time'].dropna().unique().tolist()]) if 'Time' in df.columns else ['Todos']
             time_selecionado = st.selectbox("Filtrar por Time:", times_disponiveis)
         
         with col4:
-            devs_disponiveis = ['Todos'] + sorted(df['Responsável'].dropna().unique().tolist()) if 'Responsável' in df.columns else ['Todos']
+            devs_disponiveis = ['Todos'] + sorted([str(x) for x in df['Responsável'].dropna().unique().tolist()]) if 'Responsável' in df.columns else ['Todos']
             dev_selecionado = st.selectbox("Filtrar por Desenvolvedor:", devs_disponiveis)
         
         with col5:
