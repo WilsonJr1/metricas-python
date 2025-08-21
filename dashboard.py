@@ -12,6 +12,13 @@ import io
 import base64
 from datetime import date
 
+# Configurações específicas para Streamlit Cloud
+try:
+    from streamlit_config import configure_plotly_for_streamlit
+    configure_plotly_for_streamlit()
+except ImportError:
+    print("Aviso: Configurações específicas do Streamlit não disponíveis")
+
 try:
     from reportlab.lib.pagesizes import letter, A4
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
@@ -46,18 +53,58 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+def diagnosticar_ambiente_pdf():
+    """
+    Diagnóstica o ambiente para geração de PDFs e gráficos
+    """
+    diagnostico = {
+        'kaleido_disponivel': False,
+        'kaleido_versao': None,
+        'reportlab_disponivel': False,
+        'ambiente': 'desconhecido',
+        'problemas': []
+    }
+    
+    try:
+        import kaleido
+        diagnostico['kaleido_disponivel'] = True
+        diagnostico['kaleido_versao'] = kaleido.__version__
+    except ImportError:
+        diagnostico['problemas'].append('Kaleido não instalado')
+    
+    try:
+        from reportlab.lib.pagesizes import letter
+        diagnostico['reportlab_disponivel'] = True
+    except ImportError:
+        diagnostico['problemas'].append('ReportLab não instalado')
+    
+    # Detectar ambiente
+    if 'STREAMLIT_SERVER_PORT' in os.environ:
+        diagnostico['ambiente'] = 'streamlit_cloud'
+    elif 'STREAMLIT_BROWSER_GATHER_USAGE_STATS' in os.environ:
+        diagnostico['ambiente'] = 'streamlit_local'
+    elif 'JUPYTER_SERVER_ROOT' in os.environ:
+        diagnostico['ambiente'] = 'jupyter'
+    else:
+        diagnostico['ambiente'] = 'local'
+    
+    return diagnostico
+
 def exportar_grafico_para_pdf(fig, titulo, largura=800, altura=600):
     """
     Converte um gráfico Plotly para imagem e retorna os dados da imagem
+    Otimizado para produção no Streamlit Cloud
     """
     if fig is None:
         print(f"Aviso: Gráfico '{titulo}' é None")
         return None
     
     try:
-        # Verificar se kaleido está disponível
+        # Verificar se kaleido está disponível e importar explicitamente
         try:
             import kaleido
+            import plotly.io as pio
+            print(f"Kaleido versão: {kaleido.__version__}")
         except ImportError:
             print(f"Erro: Kaleido não está instalado. Execute: pip install kaleido")
             return None
@@ -67,6 +114,36 @@ def exportar_grafico_para_pdf(fig, titulo, largura=800, altura=600):
             print(f"Erro: Objeto '{titulo}' não é um gráfico Plotly válido")
             return None
         
+        # Configurações específicas para Streamlit Cloud
+        try:
+            # Remover argumentos problemáticos do Chromium para Streamlit Cloud
+            current_args = list(pio.kaleido.scope.chromium_args)
+            problematic_args = ["--disable-dev-shm-usage", "--no-sandbox"]
+            
+            for arg in problematic_args:
+                if arg in current_args:
+                    current_args.remove(arg)
+            
+            # Adicionar argumentos seguros para produção
+            safe_args = [
+                "--single-process",
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--disable-extensions",
+                "--no-first-run",
+                "--disable-default-apps"
+            ]
+            
+            for arg in safe_args:
+                if arg not in current_args:
+                    current_args.append(arg)
+            
+            pio.kaleido.scope.chromium_args = tuple(current_args)
+            print(f"Configurações Chromium aplicadas para '{titulo}'")
+            
+        except Exception as config_error:
+            print(f"Aviso: Não foi possível configurar Chromium para '{titulo}': {config_error}")
+        
         # Configurar tema com fundo branco para PDF
         fig.update_layout(
             plot_bgcolor='white',
@@ -74,37 +151,79 @@ def exportar_grafico_para_pdf(fig, titulo, largura=800, altura=600):
             font=dict(color='black'),
             title_font_color='black',
             width=largura,
-            height=altura
+            height=altura,
+            # Configurações adicionais para estabilidade
+            showlegend=True,
+            margin=dict(l=50, r=50, t=50, b=50)
         )
         
         # Atualizar eixos para garantir que sejam visíveis
         fig.update_xaxes(gridcolor='lightgray', linecolor='black', tickcolor='black')
         fig.update_yaxes(gridcolor='lightgray', linecolor='black', tickcolor='black')
-            
-        # Tentar converter para imagem com diferentes engines
-        engines = ["kaleido", "orca"]
         
-        for engine in engines:
+        # Estratégias de conversão com timeouts e fallbacks
+        conversion_strategies = [
+            {"engine": "kaleido", "format": "png", "timeout": 30},
+            {"engine": "kaleido", "format": "jpeg", "timeout": 20},
+            {"engine": "orca", "format": "png", "timeout": 15}
+        ]
+        
+        for strategy in conversion_strategies:
             try:
-                print(f"Tentando converter '{titulo}' com engine '{engine}'...")
+                print(f"Tentando converter '{titulo}' com {strategy['engine']} ({strategy['format']})...")
+                
+                # Configurar timeout se disponível
+                if strategy['engine'] == 'kaleido':
+                    try:
+                        pio.kaleido.scope.default_timeout = strategy['timeout']
+                    except:
+                        pass
+                
+                # Tentar conversão
                 img_bytes = fig.to_image(
-                    format="png", 
+                    format=strategy['format'], 
                     width=largura, 
                     height=altura,
-                    engine=engine
+                    engine=strategy['engine']
                 )
                 
-                if img_bytes and len(img_bytes) > 0:
-                    print(f"Sucesso: Gráfico '{titulo}' convertido com '{engine}'")
+                if img_bytes and len(img_bytes) > 100:  # Verificar se não é uma imagem vazia
+                    print(f"Sucesso: Gráfico '{titulo}' convertido com {strategy['engine']} ({strategy['format']})")
                     return img_bytes
                 else:
-                    print(f"Aviso: Imagem vazia com engine '{engine}' para '{titulo}'")
+                    print(f"Aviso: Imagem muito pequena ou vazia com {strategy['engine']} para '{titulo}'")
                     
-            except Exception as engine_error:
-                print(f"Erro com engine '{engine}' para '{titulo}': {engine_error}")
+            except Exception as strategy_error:
+                print(f"Erro com {strategy['engine']} para '{titulo}': {strategy_error}")
                 continue
         
-        print(f"Erro: Falha ao converter '{titulo}' com todos os engines disponíveis")
+        # Último recurso: tentar com configurações mínimas
+        try:
+            print(f"Última tentativa para '{titulo}' com configurações mínimas...")
+            
+            # Simplificar o gráfico
+            fig_simple = fig
+            fig_simple.update_layout(
+                width=600,
+                height=400,
+                margin=dict(l=40, r=40, t=40, b=40)
+            )
+            
+            img_bytes = fig_simple.to_image(
+                format="png", 
+                width=600, 
+                height=400,
+                engine="kaleido"
+            )
+            
+            if img_bytes and len(img_bytes) > 100:
+                print(f"Sucesso na última tentativa para '{titulo}'")
+                return img_bytes
+                
+        except Exception as last_error:
+            print(f"Falha na última tentativa para '{titulo}': {last_error}")
+        
+        print(f"Erro: Falha ao converter '{titulo}' com todas as estratégias disponíveis")
         return None
         
     except Exception as e:
@@ -2850,6 +2969,41 @@ def main():
         ["🔍 Relatórios", "🔧 Sustentação"],
         help="Escolha entre o módulo de relatórios ou o módulo de sustentação"
     )
+    
+    # Diagnóstico do sistema (expansível)
+    with st.sidebar.expander("🔍 Diagnóstico do Sistema"):
+        if st.button("Executar Diagnóstico"):
+            diagnostico = diagnosticar_ambiente_pdf()
+            
+            st.write("**Ambiente:**", diagnostico['ambiente'])
+            
+            if diagnostico['kaleido_disponivel']:
+                st.success(f"✅ Kaleido v{diagnostico['kaleido_versao']}")
+            else:
+                st.error("❌ Kaleido não disponível")
+            
+            if diagnostico['reportlab_disponivel']:
+                st.success("✅ ReportLab disponível")
+            else:
+                st.error("❌ ReportLab não disponível")
+            
+            if diagnostico['problemas']:
+                st.error("**Problemas encontrados:**")
+                for problema in diagnostico['problemas']:
+                    st.write(f"- {problema}")
+            else:
+                st.success("✅ Todos os componentes funcionando")
+            
+            # Teste de geração de gráfico
+            if st.button("Testar Geração de Gráfico", key="test_graph"):
+                try:
+                    from streamlit_config import test_kaleido_functionality
+                    if test_kaleido_functionality():
+                        st.success("✅ Teste de gráfico bem-sucedido")
+                    else:
+                        st.error("❌ Falha no teste de gráfico")
+                except Exception as e:
+                    st.error(f"❌ Erro no teste: {e}")
     
     if modulo_selecionado == "🔧 Sustentação":
         if main_sustentacao:
