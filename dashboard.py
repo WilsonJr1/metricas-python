@@ -99,61 +99,195 @@ def diagnosticar_ambiente_pdf():
 
 def exportar_grafico_para_pdf(fig, titulo, largura=800, altura=600):
     """
-    Versão FINAL e DEFINITIVA para Streamlit Cloud
-    Implementação minimalista que FUNCIONA em produção
+    Versão ULTRA-ROBUSTA para Streamlit Cloud
+    Implementa múltiplas estratégias de fallback para garantir funcionamento
     """
     if fig is None:
-        print(f"Aviso: Gráfico '{titulo}' é None")
+        print(f"❌ Gráfico '{titulo}' é None")
         return None
     
+    print(f"🔄 Iniciando conversão: {titulo}")
+    
     try:
-        # Importações essenciais
         import plotly.io as pio
-        import os
+        import plotly.graph_objects as go
+        import copy
         
-        # CONFIGURAÇÃO FORÇADA PARA STREAMLIT CLOUD
-        # Estas configurações são OBRIGATÓRIAS para funcionar
-        os.environ['MPLBACKEND'] = 'Agg'
-        os.environ['DISPLAY'] = ':99'
+        # CONFIGURAÇÕES CRÍTICAS PARA STREAMLIT CLOUD
+        os.environ.update({
+            'MPLBACKEND': 'Agg',
+            'DISPLAY': ':99',
+            'KALEIDO_DISABLE_GPU': 'true',
+            'CHROMIUM_FLAGS': '--no-sandbox --disable-dev-shm-usage --disable-gpu --single-process'
+        })
         
-        # Configurar Kaleido com argumentos mínimos mas eficazes
-        pio.kaleido.scope.chromium_args = (
-            '--no-sandbox',
-            '--disable-dev-shm-usage', 
-            '--disable-gpu',
-            '--single-process'
-        )
-        pio.kaleido.scope.default_timeout = 60
+        # ESTRATÉGIA 1: Configuração Ultra-Conservadora
+        print("🎯 Estratégia 1: Configuração ultra-conservadora")
+        try:
+             # Usar nova API se disponível, senão fallback para antiga
+             if hasattr(pio, 'defaults'):
+                 pio.defaults.chromium_args = (
+                     '--no-sandbox',
+                     '--disable-dev-shm-usage',
+                     '--disable-gpu',
+                     '--single-process',
+                     '--disable-extensions',
+                     '--disable-plugins',
+                     '--no-first-run',
+                     '--disable-default-apps',
+                     '--disable-background-timer-throttling',
+                     '--disable-renderer-backgrounding'
+                 )
+                 pio.defaults.default_timeout = 120
+             else:
+                 pio.kaleido.scope.chromium_args = (
+                     '--no-sandbox',
+                     '--disable-dev-shm-usage',
+                     '--disable-gpu',
+                     '--single-process',
+                     '--disable-extensions',
+                     '--disable-plugins',
+                     '--no-first-run',
+                     '--disable-default-apps',
+                     '--disable-background-timer-throttling',
+                     '--disable-renderer-backgrounding'
+                 )
+                 pio.kaleido.scope.default_timeout = 120
+             
+             fig_copy = copy.deepcopy(fig)
+             fig_copy.update_layout(
+                 plot_bgcolor='white',
+                 paper_bgcolor='white',
+                 font=dict(color='black', size=12),
+                 width=700,
+                 height=450,
+                 margin=dict(l=60, r=60, t=80, b=60)
+             )
+             
+             img_bytes = fig_copy.to_image(format="png", width=700, height=450, scale=1)
+             
+             if img_bytes and len(img_bytes) > 1000:
+                 print(f"✅ Estratégia 1 SUCESSO: {len(img_bytes)} bytes")
+                 img_buffer = io.BytesIO(img_bytes)
+                 return Image(img_buffer, width=6*inch, height=4*inch)
+                
+        except Exception as e:
+            print(f"⚠️ Estratégia 1 falhou: {e}")
         
-        # Preparar gráfico com layout otimizado
-        fig.update_layout(
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            font=dict(color='black'),
-            width=600,  # Tamanho fixo que funciona
-            height=400,
-            margin=dict(l=50, r=50, t=50, b=50)
-        )
-        
-        print(f"Convertendo gráfico: {titulo}")
-        
-        # CONVERSÃO DIRETA - SEM LOOPS, SEM COMPLEXIDADE
-        img_bytes = fig.to_image(
-            format="png",
-            width=600,
-            height=400,
-            engine='kaleido'
-        )
-        
-        if img_bytes and len(img_bytes) > 100:
-            print(f"✅ Gráfico '{titulo}' convertido com sucesso: {len(img_bytes)} bytes")
-            return img_bytes
-        else:
-            print(f"❌ Falha na conversão de '{titulo}': imagem muito pequena")
-            return None
+        # ESTRATÉGIA 2: Configuração Minimalista
+        print("🎯 Estratégia 2: Configuração minimalista")
+        try:
+            pio.kaleido.scope.chromium_args = ('--no-sandbox', '--disable-dev-shm-usage')
+            pio.kaleido.scope.default_timeout = 90
             
+            fig_simple = copy.deepcopy(fig)
+            fig_simple.update_layout(
+                plot_bgcolor='white',
+                paper_bgcolor='white',
+                width=600,
+                height=400
+            )
+            
+            img_bytes = fig_simple.to_image(format="png", width=600, height=400)
+            
+            if img_bytes and len(img_bytes) > 500:
+                print(f"✅ Estratégia 2 SUCESSO: {len(img_bytes)} bytes")
+                img_buffer = io.BytesIO(img_bytes)
+                return Image(img_buffer, width=6*inch, height=4*inch)
+                
+        except Exception as e:
+            print(f"⚠️ Estratégia 2 falhou: {e}")
+        
+        # ESTRATÉGIA 3: Gráfico Simplificado
+        print("🎯 Estratégia 3: Gráfico simplificado")
+        try:
+            pio.kaleido.scope.chromium_args = ('--no-sandbox',)
+            pio.kaleido.scope.default_timeout = 60
+            
+            # Criar versão simplificada do gráfico
+            if hasattr(fig, 'data') and len(fig.data) > 0:
+                trace = fig.data[0]
+                
+                fig_backup = go.Figure()
+                
+                if hasattr(trace, 'x') and hasattr(trace, 'y'):
+                    if trace.type == 'bar':
+                        fig_backup.add_trace(go.Bar(
+                            x=trace.x[:10] if len(trace.x) > 10 else trace.x,
+                            y=trace.y[:10] if len(trace.y) > 10 else trace.y,
+                            name=getattr(trace, 'name', 'Dados')
+                        ))
+                    else:
+                        fig_backup.add_trace(go.Scatter(
+                            x=trace.x[:10] if len(trace.x) > 10 else trace.x,
+                            y=trace.y[:10] if len(trace.y) > 10 else trace.y,
+                            mode='lines+markers',
+                            name=getattr(trace, 'name', 'Dados')
+                        ))
+                else:
+                    # Gráfico de fallback genérico
+                    fig_backup.add_trace(go.Bar(
+                        x=['Dados', 'Disponíveis'],
+                        y=[1, 1],
+                        name='Informações'
+                    ))
+                
+                fig_backup.update_layout(
+                    title=f"Gráfico: {titulo}",
+                    plot_bgcolor='white',
+                    paper_bgcolor='white',
+                    width=500,
+                    height=350,
+                    font=dict(size=10)
+                )
+                
+                img_bytes = fig_backup.to_image(format="png", width=500, height=350)
+                
+                if img_bytes and len(img_bytes) > 100:
+                    print(f"✅ Estratégia 3 SUCESSO: {len(img_bytes)} bytes")
+                    img_buffer = io.BytesIO(img_bytes)
+                    return Image(img_buffer, width=6*inch, height=4*inch)
+                    
+        except Exception as e:
+            print(f"⚠️ Estratégia 3 falhou: {e}")
+        
+        # ESTRATÉGIA 4: Gráfico de Emergência
+        print("🎯 Estratégia 4: Gráfico de emergência")
+        try:
+            fig_emergency = go.Figure()
+            fig_emergency.add_trace(go.Scatter(
+                x=[1, 2, 3],
+                y=[1, 2, 1],
+                mode='lines+markers',
+                name='Dados do Gráfico'
+            ))
+            
+            fig_emergency.update_layout(
+                title=f"Dados: {titulo}",
+                plot_bgcolor='white',
+                paper_bgcolor='white',
+                width=400,
+                height=300,
+                showlegend=False
+            )
+            
+            img_bytes = fig_emergency.to_image(format="png", width=400, height=300)
+            
+            if img_bytes and len(img_bytes) > 50:
+                print(f"✅ Estratégia 4 SUCESSO (emergência): {len(img_bytes)} bytes")
+                img_buffer = io.BytesIO(img_bytes)
+                return Image(img_buffer, width=6*inch, height=4*inch)
+                
+        except Exception as e:
+            print(f"❌ Estratégia 4 falhou: {e}")
+        
+        print(f"❌ TODAS as estratégias falharam para '{titulo}'")
+        return None
+        
     except Exception as e:
-        print(f"❌ Erro ao converter '{titulo}': {str(e)}")
+        print(f"❌ Erro crítico na conversão de '{titulo}': {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):

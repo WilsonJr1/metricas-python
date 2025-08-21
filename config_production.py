@@ -3,8 +3,8 @@ import sys
 
 def setup_production_environment():
     """
-    Configuração DEFINITIVA para produção no Streamlit Cloud
-    Aplica todas as configurações necessárias para gerar PDFs com gráficos
+    Configura o ambiente de produção para o Streamlit Cloud
+    Usando as novas configurações do plotly.io.defaults
     """
     print("🔧 Configurando ambiente para produção...")
     
@@ -18,14 +18,30 @@ def setup_production_environment():
         # Configurar Plotly/Kaleido
         import plotly.io as pio
         
-        # Configurações minimalistas mas eficazes
-        pio.kaleido.scope.chromium_args = (
-            '--no-sandbox',
-            '--disable-dev-shm-usage', 
-            '--disable-gpu',
-            '--single-process'
-        )
-        pio.kaleido.scope.default_timeout = 60
+        # CONFIGURAÇÕES DO KALEIDO (NOVA API)
+        try:
+            # Tentar usar a nova API do plotly.io.defaults
+            if hasattr(pio, 'defaults'):
+                pio.defaults.chromium_args = (
+                    '--no-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--single-process'
+                )
+                pio.defaults.default_timeout = 60
+                print("✅ Configurações aplicadas via plotly.io.defaults")
+            else:
+                # Fallback para API antiga (com warning)
+                pio.kaleido.scope.chromium_args = (
+                    '--no-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--single-process'
+                )
+                pio.kaleido.scope.default_timeout = 60
+                print("⚠️ Usando API depreciada do kaleido.scope")
+        except Exception as config_error:
+            print(f"⚠️ Erro nas configurações do Kaleido: {config_error}")
         
         print("✅ Configurações de produção aplicadas com sucesso")
         return True
