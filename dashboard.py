@@ -134,10 +134,10 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
     story = []
     
     # Definir paleta de cores profissional
-    cor_primaria = colors.Color(0.0, 0.5, 0.0)  # Verde Delfinance
-    cor_secundaria = colors.Color(0.2, 0.6, 0.2)  # Verde médio
+    cor_primaria = colors.Color(0.2, 0.4, 0.8)  # Azul Delfinance
+    cor_secundaria = colors.Color(0.3, 0.5, 0.9)  # Azul médio
     cor_destaque = colors.Color(0.8, 0.2, 0.2)  # Vermelho
-    cor_sucesso = colors.Color(0.2, 0.6, 0.3)  # Verde
+    cor_sucesso = colors.Color(0.2, 0.4, 0.8)  # Azul
     cor_fundo = colors.Color(0.95, 0.95, 0.95)  # Cinza claro
     
     # Estilos customizados profissionais
@@ -259,27 +259,36 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
         textColor=colors.black
     )
     
-    # Logo Delfinance com cores específicas
+    # Barra azul no topo mais grossa
+    story.append(HRFlowable(width="100%", thickness=8, color=cor_primaria))
+    story.append(Spacer(1, 15))
+    
+    # Logo del.tech no canto esquerdo
     logo_style = ParagraphStyle(
         'LogoStyle',
         parent=styles['Normal'],
-        fontSize=18,
+        fontSize=14,
         fontName='Times-Bold',
-        alignment=1,  # Centralizado
-        spaceAfter=15
+        alignment=0,  # Alinhado à esquerda
+        spaceAfter=10
     )
     
-    # Criar cabeçalho centralizado
-    logo_text = Paragraph("<font color='#00C851'>Del</font><font color='black'>finance</font>", logo_style)
-    title_text = Paragraph("RELATÓRIO DETALHADO", header_style)
+    try:
+        # Tentar carregar a imagem del.tech no canto esquerdo
+        logo_img = Image("Deltech.png", width=0.5*inch, height=0.2*inch)
+        logo_img.hAlign = 'LEFT'
+        story.append(logo_img)
+    except:
+        # Fallback para texto estilizado caso a imagem não seja encontrada
+        logo_text = Paragraph("<font color='#1976D2' size='12'>🔧 del.tech</font>", logo_style)
+        story.append(logo_text)
     
-    story.append(logo_text)
+    story.append(Spacer(1, 15))
+    
+    # Título centralizado
+    title_text = Paragraph("BOLETIM DE IMPLANTAÇÕES", header_style)
     story.append(title_text)
-    story.append(Spacer(1, 30))
-    
-    # Linha decorativa
-    story.append(HRFlowable(width="100%", thickness=2, color=cor_primaria))
-    story.append(Spacer(1, 30))
+    story.append(Spacer(1, 25))
     
     # Calcular período baseado nos dados filtrados
     if len(df_filtrado) > 0 and 'Data' in df_filtrado.columns:
@@ -459,7 +468,7 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
             
             performance_table = Table(performance_data)
             performance_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.blue),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Times-Bold'),
@@ -583,7 +592,7 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
         
         aprovadas_table = Table(aprovadas_data, colWidths=[4.5*inch, 2.5*inch])
         aprovadas_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.blue),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Times-Bold'),
@@ -629,7 +638,7 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
         
         prontas_table = Table(prontas_data, colWidths=[4.5*inch, 2.5*inch])
         prontas_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.blue),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Times-Bold'),
@@ -722,17 +731,47 @@ def criar_pdf_visao_geral(df_filtrado, df_original, df_sem_teste=None):
     styles = getSampleStyleSheet()
     story = []
     
-    # Título do relatório
+    # Definir cores
+    cor_primaria = colors.Color(0.098, 0.463, 0.824)  # Azul
+    
+    # Barra azul no topo mais grossa
+    from reportlab.platypus import HRFlowable
+    story.append(HRFlowable(width="100%", thickness=8, color=cor_primaria))
+    story.append(Spacer(1, 15))
+    
+    # Logo del.tech no canto esquerdo
+    logo_style = ParagraphStyle(
+        'LogoStyle',
+        parent=styles['Normal'],
+        fontSize=14,
+        fontName='Times-Bold',
+        alignment=0,  # Alinhado à esquerda
+        spaceAfter=10
+    )
+    
+    try:
+        # Tentar carregar a imagem del.tech no canto esquerdo
+        logo_img = Image("Deltech.png", width=0.5*inch, height=0.2*inch)
+        logo_img.hAlign = 'LEFT'
+        story.append(logo_img)
+    except:
+        # Fallback para texto estilizado caso a imagem não seja encontrada
+        logo_text = Paragraph("<font color='#1976D2' size='12'>🔧 del.tech</font>", logo_style)
+        story.append(logo_text)
+    
+    story.append(Spacer(1, 15))
+    
+    # Título centralizado
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
-        fontSize=24,
-        spaceAfter=30,
+        fontSize=20,
+        spaceAfter=20,
         alignment=1
     )
     story.append(Paragraph("Visão Geral Estratégica - QA", title_style))
     story.append(Paragraph(f"Data: {date.today().strftime('%d/%m/%Y')}", styles['Normal']))
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 15))
     
     # Métricas principais
     story.append(Paragraph("Principais Indicadores", styles['Heading2']))
@@ -805,17 +844,47 @@ def criar_pdf_generico(titulo, df_filtrado, graficos_funcoes=None):
     styles = getSampleStyleSheet()
     story = []
     
-    # Título do relatório
+    # Definir cores
+    cor_primaria = colors.Color(0.098, 0.463, 0.824)  # Azul
+    
+    # Barra azul no topo mais grossa
+    from reportlab.platypus import HRFlowable
+    story.append(HRFlowable(width="100%", thickness=8, color=cor_primaria))
+    story.append(Spacer(1, 15))
+    
+    # Logo del.tech no canto esquerdo
+    logo_style = ParagraphStyle(
+        'LogoStyle',
+        parent=styles['Normal'],
+        fontSize=14,
+        fontName='Times-Bold',
+        alignment=0,  # Alinhado à esquerda
+        spaceAfter=10
+    )
+    
+    try:
+        # Tentar carregar a imagem del.tech no canto esquerdo
+        logo_img = Image("Deltech.png", width=0.5*inch, height=0.2*inch)
+        logo_img.hAlign = 'LEFT'
+        story.append(logo_img)
+    except:
+        # Fallback para texto estilizado caso a imagem não seja encontrada
+        logo_text = Paragraph("<font color='#1976D2' size='12'>🔧 del.tech</font>", logo_style)
+        story.append(logo_text)
+    
+    story.append(Spacer(1, 15))
+    
+    # Título centralizado
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
-        fontSize=24,
-        spaceAfter=30,
+        fontSize=20,
+        spaceAfter=20,
         alignment=1
     )
     story.append(Paragraph(titulo, title_style))
     story.append(Paragraph(f"Data: {date.today().strftime('%d/%m/%Y')}", styles['Normal']))
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 15))
     
     # Informações básicas
     story.append(Paragraph("Resumo dos Dados", styles['Heading2']))
@@ -1518,9 +1587,9 @@ def grafico_status_distribuicao(df_filtrado):
         
         # Definir cores baseadas no status
         color_map = {
-            'APROVADA': '#28a745',  # Verde para aprovada
+            'APROVADA': '#1976D2',  # Azul para aprovada
             'REJEITADA': '#dc3545',  # Vermelho para rejeitada
-            'PRONTO PARA PUBLICAÇÃO': '#1976D2'  # Azul para pronto
+            'PRONTO PARA PUBLICAÇÃO': '#2196F3'  # Azul para pronto
         }
         
         # Criar lista de cores baseada nos status presentes
@@ -1602,9 +1671,9 @@ def grafico_timeline_tasks(df_filtrado):
             
             # Definir cores para os status
             color_map = {
-                'APROVADA': '#28a745',  # Verde para aprovada
+                'APROVADA': '#1976D2',  # Azul para aprovada
                 'REJEITADA': '#dc3545',  # Vermelho para rejeitada
-                'PRONTO PARA PUBLICAÇÃO': '#2E7D32'  # Verde para pronto
+                'PRONTO PARA PUBLICAÇÃO': '#2196F3'  # Azul para pronto
             }
             
             fig = px.bar(
