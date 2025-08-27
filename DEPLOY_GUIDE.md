@@ -13,10 +13,14 @@ O **Kaleido v1** (usado pelo Plotly para gerar imagens) requer que o **Chrome/Ch
 ### 1. **Arquivo `packages.txt`** (CRÍTICO)
 
 ```txt
-chromium-browser
-chromium-chromedriver
+chromium
+chromium-driver
 xvfb
 ```
+
+**⚠️ IMPORTANTE**: Os nomes dos pacotes foram corrigidos para Debian/Ubuntu:
+- `chromium-browser` → `chromium` 
+- `chromium-chromedriver` → `chromium-driver`
 
 **Este arquivo é ESSENCIAL** - ele instrui o Streamlit Cloud a instalar o Chrome durante o deploy.
 
@@ -44,7 +48,7 @@ O arquivo `config_production.py` foi atualizado para:
 ## 📋 Checklist de Deploy
 
 ### ✅ **Arquivos Obrigatórios**
-- [ ] `packages.txt` (com chromium-browser)
+- [ ] `packages.txt` (com chromium e chromium-driver)
 - [ ] `.streamlit/config.toml`
 - [ ] `requirements.txt` (com kaleido>=0.2.1)
 - [ ] `config_production.py` (configurações atualizadas)
@@ -78,6 +82,7 @@ O arquivo `config_production.py` foi atualizado para:
 
 2. **Mensagens de erro comuns**:
    - `"Chrome not found"` → Verifique se `packages.txt` está no repositório
+   - `"Package 'chromium-browser' has no installation candidate"` → Use `chromium` ao invés de `chromium-browser`
    - `"Kaleido timeout"` → Problema de configuração do Chrome
    - `"Permission denied"` → Flags de segurança não aplicadas
 
