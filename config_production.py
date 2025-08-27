@@ -14,6 +14,26 @@ def setup_production_environment():
     os.environ['KALEIDO_DISABLE_GPU'] = 'true'
     os.environ['CHROMIUM_FLAGS'] = '--no-sandbox --disable-dev-shm-usage --disable-gpu --single-process'
     
+    # Verificar se Chrome está disponível
+    chrome_paths = [
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        '/usr/bin/google-chrome',
+        '/usr/bin/google-chrome-stable'
+    ]
+    
+    chrome_found = False
+    for path in chrome_paths:
+        if os.path.exists(path):
+            print(f"✅ Chrome encontrado: {path}")
+            os.environ['CHROME_EXECUTABLE'] = path
+            chrome_found = True
+            break
+    
+    if not chrome_found:
+        print("⚠️ Chrome não encontrado nos caminhos padrão")
+        print("📋 Certifique-se de que o packages.txt contém: chromium-browser")
+    
     try:
         # Configurar Plotly/Kaleido
         import plotly.io as pio
