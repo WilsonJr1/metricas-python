@@ -75,7 +75,11 @@ def diagnosticar_ambiente_pdf():
     try:
         import kaleido
         diagnostico['kaleido_disponivel'] = True
-        diagnostico['kaleido_versao'] = kaleido.__version__
+        # Correção para versões do kaleido sem __version__
+        try:
+            diagnostico['kaleido_versao'] = kaleido.__version__
+        except AttributeError:
+            diagnostico['kaleido_versao'] = 'instalado (versão desconhecida)'
     except ImportError:
         diagnostico['problemas'].append('Kaleido não instalado')
     
@@ -665,11 +669,10 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
     try:
         fig_status = grafico_status_distribuicao(df_filtrado)
         if fig_status:
-            img_bytes = exportar_grafico_para_pdf(fig_status, "Status dos Testes")
-            if img_bytes:
-                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+            img_grafico = exportar_grafico_para_pdf(fig_status, "Status dos Testes")
+            if img_grafico:
                 story.append(Paragraph("Distribuição por Status", chart_title_style))
-                story.append(img)
+                story.append(img_grafico)
                 story.append(Spacer(1, 30))
     except Exception as e:
         story.append(Paragraph(f"Erro ao gerar gráfico de status: {e}", styles['Normal']))
@@ -678,11 +681,10 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
     try:
         fig_time = grafico_tasks_por_time(df_filtrado)
         if fig_time:
-            img_bytes = exportar_grafico_para_pdf(fig_time, "Tarefas por Time")
-            if img_bytes:
-                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+            img_grafico = exportar_grafico_para_pdf(fig_time, "Tarefas por Time")
+            if img_grafico:
                 story.append(Paragraph("Tarefas por Time", chart_title_style))
-                story.append(img)
+                story.append(img_grafico)
                 story.append(Spacer(1, 30))
     except Exception as e:
         story.append(Paragraph(f"Erro ao gerar gráfico por time: {e}", styles['Normal']))
@@ -693,11 +695,10 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
     try:
         fig_retestadas = grafico_tarefas_retestadas(df_filtrado)
         if fig_retestadas:
-            img_bytes = exportar_grafico_para_pdf(fig_retestadas, "Tarefas Retestadas")
-            if img_bytes:
-                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+            img_grafico = exportar_grafico_para_pdf(fig_retestadas, "Tarefas Retestadas")
+            if img_grafico:
                 story.append(Paragraph("Histórico de Tarefas Retestadas", chart_title_style))
-                story.append(img)
+                story.append(img_grafico)
                 story.append(Spacer(1, 30))
     except Exception as e:
         story.append(Paragraph(f"Erro ao gerar gráfico de tarefas retestadas: {e}", styles['Normal']))
@@ -706,11 +707,10 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
     try:
         fig_motivos = grafico_motivos_rejeicao(df_filtrado, por_ambiente=False)
         if fig_motivos:
-            img_bytes = exportar_grafico_para_pdf(fig_motivos, "Motivos de Rejeição")
-            if img_bytes:
-                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+            img_grafico = exportar_grafico_para_pdf(fig_motivos, "Motivos de Rejeição")
+            if img_grafico:
                 story.append(Paragraph("Principais Motivos de Rejeição", chart_title_style))
-                story.append(img)
+                story.append(img_grafico)
                 story.append(Spacer(1, 15))
     except Exception as e:
         story.append(Paragraph(f"Erro ao gerar gráfico de motivos: {e}", styles['Normal']))
@@ -723,11 +723,10 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
     try:
         fig_ranking = grafico_ranking_problemas(df_filtrado)
         if fig_ranking:
-            img_bytes = exportar_grafico_para_pdf(fig_ranking, "Ranking de Problemas")
-            if img_bytes:
-                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+            img_grafico = exportar_grafico_para_pdf(fig_ranking, "Ranking de Problemas")
+            if img_grafico:
                 story.append(Paragraph("Ranking dos Principais Problemas", styles['Heading3']))
-                story.append(img)
+                story.append(img_grafico)
                 story.append(Spacer(1, 20))
     except Exception as e:
         story.append(Paragraph(f"Erro ao gerar ranking de problemas: {e}", styles['Normal']))
@@ -736,11 +735,10 @@ def criar_pdf_relatorio_detalhado(df_filtrado, df_original, df_sem_teste=None):
     try:
         fig_taxa_rejeicao = grafico_taxa_rejeicao_por_time(df_filtrado)
         if fig_taxa_rejeicao:
-            img_bytes = exportar_grafico_para_pdf(fig_taxa_rejeicao, "Taxa de Rejeição por Time")
-            if img_bytes:
-                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+            img_grafico = exportar_grafico_para_pdf(fig_taxa_rejeicao, "Taxa de Rejeição por Time")
+            if img_grafico:
                 story.append(Paragraph("Taxa de Rejeição por Time de Desenvolvimento", styles['Heading3']))
-                story.append(img)
+                story.append(img_grafico)
                 story.append(Spacer(1, 10))
     except Exception as e:
         story.append(Paragraph(f"Erro ao gerar taxa de rejeição por time: {e}", styles['Normal']))
@@ -994,11 +992,10 @@ def criar_pdf_visao_geral(df_filtrado, df_original, df_sem_teste=None):
     try:
         fig_evolucao = grafico_evolucao_qualidade(df_filtrado, por_ambiente=False)
         if fig_evolucao:
-            img_bytes = exportar_grafico_para_pdf(fig_evolucao, "Evolução da Qualidade")
-            if img_bytes:
-                img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+            img_grafico = exportar_grafico_para_pdf(fig_evolucao, "Evolução da Qualidade")
+            if img_grafico:
                 story.append(Paragraph("Evolução da Qualidade", styles['Heading3']))
-                story.append(img)
+                story.append(img_grafico)
                 story.append(Spacer(1, 10))
     except Exception as e:
         story.append(Paragraph(f"Erro ao gerar gráfico de evolução: {e}", styles['Normal']))
@@ -1075,11 +1072,10 @@ def criar_pdf_generico(titulo, df_filtrado, graficos_funcoes=None):
             try:
                 fig = funcao_grafico(df_filtrado)
                 if fig:
-                    img_bytes = exportar_grafico_para_pdf(fig, nome_grafico)
-                    if img_bytes:
-                        img = Image(io.BytesIO(img_bytes), width=6*inch, height=4*inch)
+                    img_grafico = exportar_grafico_para_pdf(fig, nome_grafico)
+                    if img_grafico:
                         story.append(Paragraph(nome_grafico, styles['Heading3']))
-                        story.append(img)
+                        story.append(img_grafico)
                         story.append(Spacer(1, 10))
             except Exception as e:
                 story.append(Paragraph(f"Erro ao gerar {nome_grafico}: {e}", styles['Normal']))
@@ -1782,6 +1778,14 @@ def grafico_status_distribuicao(df_filtrado):
             textinfo='label+percent+value',
             hovertemplate='Status: %{label}<br>Quantidade: %{value}<br>Percentual: %{percent}<extra></extra>'
         )
+        fig.update_layout(
+            title_x=0.5,
+            font=dict(size=10),
+            margin=dict(t=60, b=40, l=40, r=40),
+            height=300,
+            width=450,
+            showlegend=False
+        )
         return fig
     return None
 
@@ -1800,9 +1804,13 @@ def grafico_tasks_por_time(df_filtrado):
         )
         fig.update_coloraxes(colorbar_title="Quantidade de Tasks")
         fig.update_layout(
-            showlegend=False, 
-            height=max(450, len(time_counts) * 45),
-            margin=dict(t=50, b=80, l=200, r=150)
+            title_x=0.5,
+            font=dict(size=10),
+            showlegend=False,
+            coloraxis_showscale=False,
+            height=300,
+             width=450,
+            margin=dict(t=60, b=40, l=300, r=40)
         )
         fig.update_traces(textposition='outside', hovertemplate='Time: %{y}<br>Tasks Testadas: %{x}<extra></extra>')
         return fig
@@ -1913,8 +1921,12 @@ def grafico_motivos_rejeicao(df_filtrado, por_ambiente=False):
                         hovertemplate='Problema: %{y}<br>Ambiente: %{fullData.name}<br>Ocorrências: %{x}<extra></extra>'
                     )
                     fig.update_layout(
-                        margin=dict(t=50, b=80, l=250, r=150),
-                        height=max(450, len(motivos_counts) * 25)
+                        title_x=0.5,
+                        font=dict(size=10),
+                        margin=dict(t=60, b=40, l=350, r=40),
+                        height=300,
+                         width=450,
+                        showlegend=False
                     )
                     return fig
             else:
@@ -1951,8 +1963,12 @@ def grafico_motivos_rejeicao(df_filtrado, por_ambiente=False):
                         hovertemplate='Problema: %{y}<br>Ocorrências: %{x}<extra></extra>'
                     )
                     fig.update_layout(
-                        margin=dict(t=50, b=80, l=250, r=150),
-                        height=max(450, len(motivos_counts) * 40)
+                        title_x=0.5,
+                        font=dict(size=10),
+                        margin=dict(t=60, b=40, l=350, r=40),
+                        height=300,
+             width=450,
+                        showlegend=False
                     )
                     return fig
     return None
@@ -2439,11 +2455,13 @@ def grafico_ranking_problemas(df_filtrado):
     
     fig.update_traces(textposition='outside')
     fig.update_layout(
-        title_font_color='#FFFFFF',
+        title_x=0.5,
+        font=dict(size=10),
         xaxis_title='Quantidade de Ocorrências',
         yaxis_title='Tipo de Problema',
-        margin=dict(t=60, b=80, l=200, r=50),
-        height=450,
+        margin=dict(t=60, b=40, l=300, r=40),
+        height=300,
+         width=450,
         yaxis={'categoryorder': 'total ascending'},
         showlegend=False,
         coloraxis_showscale=False
@@ -2585,12 +2603,16 @@ def grafico_tarefas_retestadas(df_filtrado):
             color_continuous_scale=['#FF6B6B', '#4ECDC4', '#45B7D1']
         )
         
-        fig.update_traces(textposition='outside', textfont_size=12)
+        fig.update_traces(textposition='outside', textfont_size=10)
         fig.update_layout(
-            margin=dict(t=50, b=120, l=80, r=80),
-            height=450,
+            title_x=0.5,
+            font=dict(size=10),
+            margin=dict(t=60, b=100, l=40, r=40),
+            height=300,
+            width=450,
             xaxis_tickangle=45,
-            showlegend=False
+            showlegend=False,
+            coloraxis_showscale=False
         )
         return fig
     
@@ -2650,8 +2672,12 @@ def grafico_taxa_rejeicao_por_time(df_filtrado):
                 )
                 fig.update_coloraxes(showscale=False)
                 fig.update_layout(
-                    margin=dict(t=50, b=120, l=120, r=80),
-                    height=450
+                    title_x=0.5,
+                    font=dict(size=10),
+                    margin=dict(t=60, b=100, l=40, r=40),
+                    height=300,
+                    width=450,
+                    showlegend=False
                 )
                 fig.update_traces(
                     texttemplate='%{text}%',
@@ -3020,14 +3046,6 @@ def metricas_resumo(df_filtrado, df_original, df_sem_teste=None):
 
 
 def main():
-    # Navegação entre módulos
-    st.sidebar.title("Navegação")
-    modulo_selecionado = st.sidebar.radio(
-        "Selecione o módulo:",
-        ["🔍 Relatórios", "🔧 Sustentação"],
-        help="Escolha entre o módulo de relatórios ou o módulo de sustentação"
-    )
-    
     # Diagnóstico do sistema (expansível)
     with st.sidebar.expander("🔍 Diagnóstico do Sistema"):
         if st.button("Executar Diagnóstico"):
@@ -3062,13 +3080,6 @@ def main():
                         st.error("❌ Falha no teste de gráfico")
                 except Exception as e:
                     st.error(f"❌ Erro no teste: {e}")
-    
-    if modulo_selecionado == "🔧 Sustentação":
-        if main_sustentacao:
-            main_sustentacao()
-        else:
-            st.error("❌ Módulo de sustentação não disponível")
-        return
     
     # Módulo de QA (código original)
     # Título principal
@@ -4005,16 +4016,8 @@ def main():
                 )
                 
                 st.plotly_chart(fig_taxa, use_container_width=True, key="comparativo_taxas_detalhado")
-            
-
         
-        with tab4:
-            st.markdown("### 📋 **Dados Detalhados**")
-            st.markdown("*Visualização completa dos dados de testes realizados pelo time de Q.A*")
-            
-            if st.checkbox("Mostrar dados dos testes efetuados", key="show_data_checkbox"):
-                st.dataframe(df_com_teste, use_container_width=True)
-                st.caption(f"Total de testes efetuados exibidos: {len(df_com_teste)}")
+
         
         with tab5:
             st.markdown("### 📋 **Tarefas Sem Teste**")
